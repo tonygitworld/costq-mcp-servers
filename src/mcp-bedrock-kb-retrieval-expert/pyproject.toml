@@ -1,6 +1,6 @@
 [project]
 name = "awslabs.mcp-bedrock-kb-retrieval-expert"
-version = "0.0.0"
+version = "0.0.311803"
 description = "An AWS Labs Model Context Protocol (MCP) server bedrock-kb-retrieval expert"
 readme = "README.md"
 requires-python = ">=3.13"
