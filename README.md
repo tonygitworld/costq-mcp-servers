@@ -9,6 +9,19 @@ A suite of specialized MCP servers that bring AWS best practices directly to you
 
 This monorepo contains the following MCP servers:
 
+### Core MCP Server
+
+[![PyPI version](https://img.shields.io/pypi/v/awslabs.core-mcp-server.svg)](https://pypi.org/project/awslabs.core-mcp-server/)
+
+A server for managing and coordinating other AWS Labs MCP servers.
+
+- Automatic MCP Server Management
+- Planning and guidance to orchestrate AWS Labs MCP Servers
+- UVX Installation Support
+- Centralized Configuration
+
+[Learn more](src/core-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/core-mcp-server/)
+
 ### Bedrock Knowledge Bases Retrieval MCP Server
 
 [![PyPI version](https://img.shields.io/pypi/v/awslabs.bedrock-kb-retrieval-mcp-server.svg)](https://pypi.org/project/awslabs.bedrock-kb-retrieval-mcp-server/)
@@ -73,12 +86,20 @@ Example configuration for Amazon Q CLI MCP (`~/.aws/amazonq/mcp.json`):
 ```json
 {
   "mcpServers": {
+    "awslabs.core-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.core-mcp-server@latest"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    },
     "awslabs.nova-canvas-mcp-server": {
       "command": "uvx",
       "args": ["awslabs.nova-canvas-mcp-server@latest"],
       "env": {
         "AWS_PROFILE": "your-aws-profile",
-        "AWS_REGION": "us-east-1"
+        "AWS_REGION": "us-east-1",
+        "FASTMCP_LOG_LEVEL": "ERROR"
       }
     },
     "awslabs.bedrock-kb-retrieval-mcp-server": {
@@ -86,7 +107,8 @@ Example configuration for Amazon Q CLI MCP (`~/.aws/amazonq/mcp.json`):
       "args": ["awslabs.bedrock-kb-retrieval-mcp-server@latest"],
       "env": {
         "AWS_PROFILE": "your-aws-profile",
-        "AWS_REGION": "us-east-1"
+        "AWS_REGION": "us-east-1",
+        "FASTMCP_LOG_LEVEL": "ERROR"
       }
     },
     "awslabs.cost-analysis-mcp-server": {
@@ -134,3 +156,7 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This project is licensed under the Apache-2.0 License.
+
+## Disclaimer
+
+Before using an MCP Server, you should consider conducting your own independent assessment to ensure that your use would comply with your own specific security and quality control practices and standards, as well as the laws, rules, and regulations that govern you and your content.
