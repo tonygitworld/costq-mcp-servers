@@ -35,7 +35,7 @@ Here are some ways you can work with MCP across AWS, and we’ll be adding suppo
       "command": "uvx",
       "args": ["awslabs.cost-analysis-mcp-server@latest"],
       "env": {
-        "AWS_PROFILE": "your-aws-profile"  // Optional: specify AWS profile
+        "FASTMCP_LOG_LEVEL": "ERROR"
       },
       "disabled": false,
       "autoApprove": []
