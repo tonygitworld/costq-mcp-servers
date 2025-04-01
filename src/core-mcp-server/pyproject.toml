@@ -1,18 +1,19 @@
 [project]
-name = "awslabs.cost-analysis-mcp-server"
-version = "0.0.010233"
-description = "An AWS Labs Model Context Protocol (MCP) server for Cost Analysis of the AWS services"
+name = "awslabs.core-mcp-server"
+version = "0.0.01"
+description = "An AWS Labs Model Context Protocol (MCP) server for aswlabs Core MCP Server"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "mcp[cli]>=1.6.0",
+    "boto3>=1.37.0",
+    "loguru>=0.7.3",
+    "mcp[cli]>=1.3.0",
     "pydantic>=2.10.6",
-    "boto3>=1.36.20",
-    "bs4>=0.0.2",
+    "python-dotenv>=1.0.1",
 ]
 
 [project.scripts]
-"awslabs.cost-analysis-mcp-server" = "awslabs.cost_analysis_mcp_server.server:main"
+"awslabs.core-mcp-server" = "awslabs.core_mcp_server.server:main"
 
 [dependency-groups]
 dev = [
@@ -73,7 +74,7 @@ version = "0.0.0"
 tag_format = "v$version"
 version_files = [
     "pyproject.toml:version",
-    "awslabs/cost_analysis_mcp_server/__init__.py:__version__"
+    "awslabs/core_mcp_server/__init__.py:__version__"
 ]
 update_changelog_on_bump = true
 
