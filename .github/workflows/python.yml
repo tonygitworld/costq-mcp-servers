@@ -3,6 +3,7 @@ name: Python
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -29,6 +30,11 @@ jobs:
         package: ${{ fromJson(needs.detect-packages.outputs.packages) }}
     name: Build ${{ matrix.package }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      security-events: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
 
@@ -41,9 +47,31 @@ jobs:
           python-version-file: "src/${{ matrix.package }}/.python-version"
           # cache: uv (not supported)
 
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      - name: Security check - Bandit
+        working-directory: src/${{ matrix.package }}
+        run: bandit --recursive -ll --format html --output bandit-report-${{ matrix.package }}.html -r . -c "pyproject.toml" || exit 1
+
+      - name: Store Bandit as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report-${{ matrix.package }}.html
+          path: src/${{ matrix.package }}/bandit-report-${{ matrix.package }}.html
+
       - name: Install dependencies
         working-directory: src/${{ matrix.package }}
         run: uv sync --frozen --all-extras --dev
+
+      - name: Run tests
+        working-directory: src/${{ matrix.package }}
+        run: |
+          if [ -d "tests" ]; then
+            uv run --frozen pytest
+          else
+            echo "No tests directory found, skipping tests"
+          fi
 
       - name: Run pyright
         working-directory: src/${{ matrix.package }}
