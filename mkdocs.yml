@@ -1,5 +1,10 @@
 site_name: AWS MCP Servers
 site_url: https://awslabs.github.io/mcp
+
+repo_name: 'awslabs/mcp'
+repo_url: 'https://github.com/awslabs/mcp'
+copyright: '&copy; Amazon Web Services, Inc. or its affiliates. All rights reserved.'
+
 theme:
   name: material
   logo: images/logo.png
