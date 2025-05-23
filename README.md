@@ -27,16 +27,19 @@ A suite of specialized MCP servers that help you get the most out of AWS, wherev
     - [Amazon SNS / SQS MCP Server](#amazon-sns--sqs-mcp-server)
     - [AWS Terraform MCP Server](#aws-terraform-mcp-server)
     - [Frontend MCP Server](#frontend-mcp-server)
-    - [Amazon ElastiCache/MemoryDB Valkey MCP Server](#amazon-elasticache--memorydb-valkey-mcp-server)
-    - [Amazon ElastiCache Memcached MCP Server](#amazon-elasticache-memcached-mcp-server)
+    - [Amazon ElastiCache/MemoryDB Valkey for MCP Server](#amazon-elasticache--memorydb-for-valkey-mcp-server)
+    - [Amazon ElastiCache Memcached for MCP Server](#amazon-elasticache-for-memcached-mcp-server)
     - [AWS Location Service MCP Server](#aws-location-service-mcp-server)
     - [Git Repo Research MCP Server](#git-repo-research-mcp-server)
     - [Code Documentation Generation MCP Server](#code-documentation-generation-mcp-server)
-    - [Postgres MCP Server](#postgres-mcp-server)
+    - [Amazon Aurora Postgres MCP Server](#amazon-aurora-postgres-mcp-server)
+    - [Amazon Aurora MySql MCP Server](#amazon-aurora-mysql-mcp-server)
     - [Amazon MQ MCP Server](#amazon-mq-mcp-server)
     - [Synthetic Data MCP Server](#synthetic-data-mcp-server)
-    - [AWS DynamoDB MCP Server](#aws-dynamodb-mcp-server)
+    - [Amazon Aurora DSQL MCP Server](#amazon-aurora-dsql-mcp-server)
+    - [Amazon DynamoDB MCP Server](#amazon-dynamodb-mcp-server)
     - [Amazon Neptune MCP Server](#amazon-neptune-mcp-server)
+    - [Amazon DocumentDB MCP Server](#amazon-documentdb-mcp-server)
     - [Use Cases for the Servers](#use-cases-for-the-servers)
   - [Installation and Setup](#installation-and-setup)
     - [Running MCP servers in containers](#running-mcp-servers-in-containers)
@@ -248,7 +251,7 @@ A server that provides specialized documentation for modern web application deve
 
 [Learn more](src/frontend-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/frontend-mcp-server/)
 
-### Amazon ElastiCache / MemoryDB Valkey MCP Server
+### Amazon ElastiCache / MemoryDB for Valkey MCP Server
 
 [![PyPI version](https://img.shields.io/pypi/v/awslabs.valkey-mcp-server.svg)](https://pypi.org/project/awslabs.valkey-mcp-server/)
 
@@ -262,7 +265,7 @@ A server that provides natural language interface to interact with Amazon Elasti
 
 [Learn more](src/valkey-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/valkey-mcp-server/)
 
-### Amazon ElastiCache Memcached MCP Server
+### Amazon ElastiCache for Memcached MCP Server
 
 [![PyPI version](https://img.shields.io/pypi/v/awslabs.memcached-mcp-server.svg)](https://pypi.org/project/awslabs.memcached-mcp-server/)
 
@@ -318,7 +321,7 @@ A server that automatically generates comprehensive documentation for code repos
 
 [Learn more](src/code-doc-gen-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/code-doc-gen-mcp-server/)
 
-### Postgres MCP Server
+### Amazon Aurora Postgres MCP Server
 
 [![PyPI version](https://img.shields.io/pypi/v/awslabs.postgres-mcp-server.svg)](https://pypi.org/project/awslabs.postgres-mcp-server/)
 
@@ -328,6 +331,17 @@ A server for Aurora Postgres.
 - Fetch table columns and comments from Postgres using RDS Data API
 
 [Learn more](src/postgres-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/postgres-mcp-server/)
+
+### Amazon Aurora MySql MCP Server
+
+[![PyPI version](https://img.shields.io/pypi/v/awslabs.mysql-mcp-server.svg)](https://pypi.org/project/awslabs.mysql-mcp-server/)
+
+A server for Aurora MySql.
+
+- Converting human-readable questions and commands into structured MySQL-compatible SQL queries and executing them against the configured Aurora MySQL database.
+- Fetch table schema
+
+[Learn more](src/mysql-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/mysql-mcp-server/)
 
 ### Amazon Neptune MCP Server
 
@@ -340,6 +354,21 @@ A server for interacting with Amazon Neptune graph database.
 - Get the schema of the graph
 
 [Learn more](src/amazon-neptune-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/amazon-neptune-mcp-server/)
+
+### Amazon DocumentDB MCP Server
+
+[![PyPI version](https://img.shields.io/pypi/v/awslabs.documentdb-mcp-server.svg)](https://pypi.org/project/awslabs.documentdb-mcp-server/)
+
+A server for interacting with Amazon DocumentDB clusters, Amazon's MongoDB-compatible document database service.
+
+- Connect to DocumentDB clusters with SSL/TLS support
+- Execute queries, aggregations, and CRUD operations
+- Analyze collection schema and document structure
+- Manage databases and collections
+- Get database and collection statistics
+- Optimize operations with query planning and execution statistics
+
+[Learn more](src/documentdb-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/documentdb-mcp-server/)
 
 ### Amazon MQ MCP Server
 
@@ -368,7 +397,7 @@ A server for generating, validating, and managing synthetic data.
 
 [Learn more](src/syntheticdata-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/syntheticdata-mcp-server/)
 
-### Aurora DSQL MCP Server
+### Amazon Aurora DSQL MCP Server
 
 [![PyPI version](https://img.shields.io/pypi/v/awslabs.aurora-dsql-mcp-server.svg)](https://pypi.org/project/awslabs.aurora-dsql-mcp-server/)
 
@@ -378,16 +407,16 @@ An AWS Labs Model Context Protocol (MCP) server for Aurora DSQL
 
 [Learn more](src/aurora-dsql-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/aurora-dsql-mcp-server/)
 
-### AWS DynamoDB MCP Server
+### Amazon DynamoDB MCP Server
 
-A server for interacting with AWS DynamoDB
+A server for interacting with Amazon DynamoDB
 
 - Control Plane operations like table creation, table update, global secondary index, streams, global table management, backup, restore, etc.
 - Data Plane operations like put, get, update, query and scan.
 
 [Learn more](src/dynamodb-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/dynamodb-mcp-server/)
 
-## MCP Lambda Handler Module
+## MCP AWS Lambda Handler Module
 
 A Python library for creating serverless HTTP handlers for the Model Context Protocol (MCP) using AWS Lambda. This module provides a flexible framework for building MCP HTTP endpoints with pluggable session management, including built-in DynamoDB support.
 
