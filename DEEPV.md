@@ -10,9 +10,11 @@
 - Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
 - Always use semgrep MCP to scan code for security vulnerabilities.
 
+
 # 文档规范
 
 - 将需求文档、任务文档、临时文档、测试脚本等临时文件创建到 costq/docs/ 目录下，需要在 costq/docs/ 下创建和主题相应的以日期戳开头的子目录如：“20261121_流式输出功能”
+
 
 # 编码规范
 
@@ -28,6 +30,7 @@
 - 凡是在方案、编码过程遇到任何争议或不确定，必须在第一时间主动告知我由我做决策。
 - 对于需要补充的信息，即使向我询问，而不是直接应用修改。
 - 每次改动基于最小范围修改原则。
+
 
 # AWS 命令行调试程序使用的参数
 
@@ -51,7 +54,22 @@
 - namespace: costq-fastapi
 - Pod: costq-fastapi
 
-## CostQ MCP 项目 deployment 目录包含两个部署脚本
+## CostQ MCP 项目 costq/scripts 目录包含部署脚本
 
-1. 01-build_and_push_billing-cost-management-mcp-server.sh：构建并推送 Billing Cost Management MCP Server 镜像到 ECR
-2. 01-build_and_push_context_setup_mcp_server.sh：构建并推送 Context Setup MCP Server 镜像到 ECR
+当前只构建镜像并上传到 ECR，之后需要手动更新 Runtime，**务必记得刷新 Gateway**
+
+
+# Git 仓库同步操作规范：
+
+1. 仓库信息：costq-mcp-servers 是从 awslabs/mcp fork 的项目
+2. Remote 配置：origin = tonygitworld/costq-mcp-servers (自己的 fork)，upstream = awslabs/mcp.git (原始仓库)
+3. 同步 upstream 标准流程：
+   - 第一步：git fetch upstream（安全下载，不自动合并）
+   - 第二步：git log --oneline HEAD..upstream/main（查看更新）
+   - 第三步：git diff HEAD..upstream/main（查看具体改动）
+   - 第四步：git rebase upstream/main（推荐）或 git merge upstream/main
+   - 第五步：解决冲突（如果有）
+   - 第六步：git push origin main（推送到自己的 fork）
+4. 提交代码规范：当用户说"提交到git"、"推送到git"、"提交并推送到git"时，执行 git add . && git commit -m "..." && git push origin main
+5. 开发分支策略：在 main 分支直接开发（已确认），除非显示说明创建分支。
+6. 重要原则：永远先用 git fetch upstream 查看，不直接使用 git pull upstream，确保可控和安全
