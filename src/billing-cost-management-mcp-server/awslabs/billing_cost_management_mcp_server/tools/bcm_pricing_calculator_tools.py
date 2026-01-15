@@ -28,6 +28,14 @@ from datetime import datetime
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 # Constants
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S UTC'
@@ -209,6 +217,7 @@ USE THIS TOOL FOR:
 async def bcm_pricing_calc(
     ctx: Context,
     operation: str,
+    target_account_id: Optional[str] = None,
     identifier: Optional[str] = None,
     created_after: Optional[str] = None,
     created_before: Optional[str] = None,
@@ -227,9 +236,45 @@ async def bcm_pricing_calc(
     max_results: Optional[int] = None,
     max_pages: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """FastMCP tool wrapper for BCM Pricing Calculator operations."""
+    """FastMCP tool wrapper for BCM Pricing Calculator operations.
+
+    Args:
+        ctx: The MCP context object
+        operation: The operation to perform
+        target_account_id: Target AWS account ID for credential initialization. If not provided, use default credentials.
+        identifier: Identifier for specific operations
+        created_after: Filter estimates created after this timestamp
+        created_before: Filter estimates created before this timestamp
+        expires_after: Filter estimates expiring after this timestamp
+        expires_before: Filter estimates expiring before this timestamp
+        status_filter: Filter by status
+        name_filter: Filter by name
+        name_match_option: Match option for name filter
+        usage_account_id_filter: Filter by AWS account ID for usage data
+        service_code_filter: Filter by AWS service code
+        usage_type_filter: Filter by usage type
+        operation_filter: Filter by operation
+        location_filter: Filter by location
+        usage_group_filter: Filter by usage group
+        next_token: Pagination token
+        max_results: Maximum results per page
+        max_pages: Maximum number of pages
+
+    **Parameter Notes**:
+    - target_account_id: Specifies which account's credentials to use (credential initialization)
+    - usage_account_id_filter: Filters which account's usage data to retrieve (business filter)
+    - Both parameters can be used independently or together
+    """
     # need this wrapper to improve code coverage as FastMCP decorated methods cannot be tested directly.
-    return await bcm_pricing_calc_core(
+
+    try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
+        return await bcm_pricing_calc_core(
         ctx,
         operation,
         identifier,
@@ -250,6 +295,22 @@ async def bcm_pricing_calc(
         max_results,
         max_pages,
     )
+
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
+    except Exception as e:
+        return await handle_aws_error(ctx, e, 'bcm_pricing_calc', BCM_PRICING_CALCULATOR_SERVICE_NAME)
 
 
 async def get_preferences(ctx: Context) -> dict:

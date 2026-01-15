@@ -22,6 +22,14 @@ from datetime import datetime
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, List, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 budget_server = FastMCP(name='budget-tools', instructions='Tools for working with AWS Budgets API')
 
@@ -45,6 +53,7 @@ The tool automatically retrieves the AWS account ID of the calling identity or u
 )
 async def budgets(
     ctx: Context,
+    target_account_id: Optional[str] = None,
     budget_name: Optional[str] = None,
     max_results: int = 100,
     account_id: Optional[str] = None,
@@ -53,14 +62,26 @@ async def budgets(
 
     Args:
         ctx: The MCP context object
+        target_account_id: Target AWS account ID for credential initialization. If not provided, use default credentials.
         budget_name: Optional budget name filter. If provided, only returns information for the specified budget.
         max_results: Maximum number of results to return. Defaults to 100.
-        account_id: Optional AWS account ID. If not provided, it will be retrieved automatically.
+        account_id: AWS account ID to query budgets for. If not provided, it will be retrieved automatically.
+
+    **Parameter Notes**:
+    - target_account_id: Specifies which account's credentials to use (credential initialization)
+    - account_id: Specifies which account's budgets to query (business query)
+    - Both parameters can be used independently or together
 
     Returns:
         Dict containing the budget information
     """
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         # Log the request
         await ctx.info(
             f'Retrieving budgets (budget_name={budget_name}, max_results={max_results})'
@@ -74,6 +95,19 @@ async def budgets(
         # Call describe_budgets
         return await describe_budgets(ctx, account_id, budget_name, max_results)
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Use shared error handler for consistent error reporting
         return await handle_aws_error(ctx, e, 'budgets', 'AWS Budgets')

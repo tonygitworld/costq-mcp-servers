@@ -26,6 +26,14 @@ from ..utilities.aws_service_base import (
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, List, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 free_tier_usage_server = FastMCP(
     name='free-tier-usage-tools', instructions='Tools for working with AWS Free Tier Usage API'
@@ -48,6 +56,7 @@ This tool provides insights into your AWS Free Tier usage across services:
 )
 async def free_tier_usage(
     ctx: Context,
+    target_account_id: Optional[str] = None,
     operation: str = 'get_free_tier_usage',
     filter: Optional[str] = None,
     max_results: Optional[int] = None,
@@ -56,6 +65,7 @@ async def free_tier_usage(
 
     Args:
         ctx: The MCP context object
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
         operation: The operation to perform: 'get_free_tier_usage'
         filter: Optional filter to apply to the results as a JSON string.
         max_results: Maximum number of results to return per page (1-1000). Defaults to 100.
@@ -64,6 +74,12 @@ async def free_tier_usage(
         Dict containing the free tier usage information
     """
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         await ctx.info(f'Free Tier Usage operation: {operation}')
 
         # Initialize Free Tier client using shared utility
@@ -76,6 +92,19 @@ async def free_tier_usage(
                 'error', {}, f"Unsupported operation: {operation}. Use 'get_free_tier_usage'."
             )
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Use shared error handler for consistent error reporting
         return await handle_aws_error(ctx, e, 'free_tier_usage', 'Free Tier Usage')

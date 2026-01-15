@@ -32,6 +32,14 @@ from botocore.exceptions import ClientError
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 cost_explorer_server = FastMCP(
     name='cost-explorer-tools', instructions='Tools for working with AWS Cost Explorer API'
@@ -132,7 +140,8 @@ DIMENSION REFERENCE:
 )
 async def cost_explorer(
     ctx: Context,
-    operation: str,
+    target_account_id: Optional[str] = None,
+    operation: str = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     granularity: str = 'DAILY',
@@ -156,6 +165,7 @@ async def cost_explorer(
 
     Args:
         ctx: MCP context
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
         operation: The operation to perform
         start_date: Start date for cost data in YYYY-MM-DD format
         end_date: End date for cost data in YYYY-MM-DD format (exclusive)
@@ -176,10 +186,16 @@ async def cost_explorer(
     Returns:
         Response from the operation handler
     """
-    await ctx.info(f'Cost Explorer operation: {operation}')
-
-    # Create Cost Explorer client
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
+        await ctx.info(f'Cost Explorer operation: {operation}')
+
+        # Create Cost Explorer client
         ce_client = create_aws_client('ce')
     except Exception as client_error:
         await ctx.error(f'Failed to create AWS client: {str(client_error)}')
@@ -300,6 +316,19 @@ async def cost_explorer(
         else:
             return format_response('error', {'message': f'Unknown operation: {operation}'})
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except ClientError as e:
         # Let the shared handler take care of this
         return await handle_aws_error(ctx, e, operation, 'Cost Explorer')

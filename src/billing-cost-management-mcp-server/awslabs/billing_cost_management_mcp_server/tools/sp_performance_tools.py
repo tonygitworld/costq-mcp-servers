@@ -29,6 +29,14 @@ from ..utilities.logging_utils import get_context_logger
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, Optional, Union
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 sp_performance_server = FastMCP(
     name='sp-performance-tools',
@@ -49,6 +57,7 @@ This tool provides insights into your Savings Plans usage patterns through three
 async def sp_performance(
     ctx: Context,
     operation: str,
+    target_account_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     granularity: str = 'DAILY',
@@ -62,6 +71,7 @@ async def sp_performance(
     Args:
         ctx: The MCP context object
         operation: The operation to perform: 'get_savings_plans_coverage', 'get_savings_plans_utilization', or 'get_savings_plans_utilization_details'
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
         start_date: Start date in YYYY-MM-DD format (inclusive). Defaults to 30 days ago if not provided.
         end_date: End date in YYYY-MM-DD format (exclusive). Defaults to today if not provided.
         granularity: Time granularity of the data (DAILY or MONTHLY). Defaults to DAILY.
@@ -74,6 +84,12 @@ async def sp_performance(
         Dict containing the savings plans coverage/utilization information
     """
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         await ctx.info(f'Savings Plans Coverage/Utilization operation: {operation}')
 
         # Initialize Cost Explorer client using shared utility
@@ -98,6 +114,19 @@ async def sp_performance(
                 f"Unsupported operation: {operation}. Use 'get_savings_plans_coverage', 'get_savings_plans_utilization', or 'get_savings_plans_utilization_details'.",
             )
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Use shared error handler for consistent error reporting
         return await handle_aws_error(ctx, e, 'sp_performance', 'Cost Explorer')

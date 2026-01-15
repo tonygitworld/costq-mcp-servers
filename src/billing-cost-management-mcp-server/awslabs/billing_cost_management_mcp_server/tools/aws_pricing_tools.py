@@ -29,6 +29,14 @@ from .aws_pricing_operations import (
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 aws_pricing_server = FastMCP(
     name='aws-pricing-tools', instructions='Tools for working with AWS Pricing API'
@@ -78,6 +86,7 @@ The tool automatically maps your region to the nearest pricing endpoint.""",
 async def aws_pricing(
     ctx: Context,
     operation: str,
+    target_account_id: Optional[str] = None,
     service_code: Optional[str] = None,
     attribute_name: Optional[str] = None,
     region: Optional[str] = None,
@@ -89,6 +98,7 @@ async def aws_pricing(
     Args:
         ctx: The MCP context object
         operation: The pricing operation to perform ('get_service_codes', 'get_service_attributes', 'get_attribute_values', 'get_pricing_from_api')
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
         service_code: AWS service code (e.g., 'AmazonEC2', 'AmazonS3', 'AmazonES'). Required for get_service_attributes, get_attribute_values, and get_pricing_from_api operations.
         attribute_name: Attribute name (e.g., 'instanceType', 'location', 'storageClass'). Required for get_attribute_values operation.
         region: AWS region (e.g., 'us-east-1', 'us-west-2', 'eu-west-1'). Required for get_pricing_from_api operation.
@@ -99,6 +109,9 @@ async def aws_pricing(
         Dict containing the pricing information
     """
     try:
+        # ===== Account context initialization =====
+
+        # ===== Original logic (unchanged) =====
         await ctx.info(f'AWS Pricing operation: {operation}')
 
         if operation == 'get_service_codes':
@@ -144,6 +157,19 @@ async def aws_pricing(
                 },
             )
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Use shared error handler for consistent error reporting
         return await handle_aws_error(ctx, e, operation, 'AWS Pricing')

@@ -38,6 +38,7 @@ ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install system dependencies and Python package manager
+# Added postgresql-dev for psycopg2-binary
 RUN apk update && \
     apk add --no-cache --virtual .build-deps \
     build-base \
@@ -45,7 +46,8 @@ RUN apk update && \
     musl-dev \
     libffi-dev \
     openssl-dev \
-    cargo
+    cargo \
+    postgresql-dev
 
 # Install the project's dependencies using the lockfile and settings
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -65,11 +67,15 @@ FROM public.ecr.aws/docker/library/python:3.13-alpine@sha256:070342a0cc1011532c0
 
 # Place executables in the environment at the front of the path and include other binaries
 ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app" \
     PYTHONUNBUFFERED=1
 
+WORKDIR /app
+
 # Install runtime dependencies and create application user
+# Added postgresql-libs for psycopg2-binary runtime support
 RUN apk update && \
-    apk add --no-cache ca-certificates && \
+    apk add --no-cache ca-certificates postgresql-libs && \
     update-ca-certificates && \
     addgroup -S app && \
     adduser -S app -G app -h /app
@@ -77,12 +83,48 @@ RUN apk update && \
 # Copy application artifacts from build stage
 COPY --from=uv --chown=app:app /app/.venv /app/.venv
 
+# Copy entrypoint.py and cred_extract_services for AgentCore Runtime
+COPY --chown=app:app ./entrypoint.py /app/entrypoint.py
+COPY --chown=app:app ./cred_extract_services /app/cred_extract_services
+
 # Get healthcheck script
 COPY ./docker-healthcheck.sh /usr/local/bin/docker-healthcheck.sh
 
-# Run as non-root
+
+######## 以下是为了部署 Runtime 修改的部分
+
+EXPOSE 9000
+EXPOSE 8000
+EXPOSE 8080
+
+ENV UV_SYSTEM_PYTHON=1 \
+    UV_NO_PROGRESS=1 \
+    DOCKER_CONTAINER=1 \
+    AWS_REGION=ap-northeast-1 \
+    AWS_DEFAULT_REGION=ap-northeast-1 \
+    MCP_HOST=0.0.0.0 \
+    MCP_PORT=8000 \
+    MCP_STATELESS_HTTP=true \
+    MCP_TRANSPORT=streamable-http
+
+# 安装额外的 Python 依赖（需要在切换用户前安装，因为需要 root 权限）
+# 使用 uv pip 安装到虚拟环境中
+# 1. aws-opentelemetry-distro：OpenTelemetry 监控
+# 2. sqlalchemy：数据库 ORM（用于多账号凭证管理）
+# 3. psycopg2-binary：PostgreSQL 数据库驱动
+# 4. cryptography：加密解密库（用于凭证加密）
+# 注意：需要先安装 uv 到系统
+RUN pip install --no-cache-dir uv && \
+    uv pip install --python /app/.venv/bin/python \
+    aws-opentelemetry-distro==0.12.2 \
+    sqlalchemy>=2.0.0 \
+    psycopg2-binary>=2.9.0 \
+    cryptography>=41.0.0
+
+# 使用已创建的 app 用户（Alpine 使用 adduser，前面已创建）
 USER app
 
 # When running the container, add --db-path and a bind mount to the host's db file
 HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 CMD ["docker-healthcheck.sh"]
-ENTRYPOINT ["awslabs.billing-cost-management-mcp-server"]
+
+CMD ["opentelemetry-instrument", "python", "-m", "entrypoint"]

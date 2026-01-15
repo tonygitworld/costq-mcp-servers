@@ -26,6 +26,14 @@ from ..utilities.aws_service_base import (
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 cost_comparison_server = FastMCP(
     name='cost-comparison-tools', instructions='Tools for working with AWS Cost Comparison API'
@@ -87,12 +95,13 @@ Note:
 )
 async def cost_comparison(
     ctx: Context,
-    operation: str,
-    baseline_start_date: str,
-    baseline_end_date: str,
-    comparison_start_date: str,
-    comparison_end_date: str,
-    metric_for_comparison: str,
+    target_account_id: Optional[str] = None,
+    operation: str = None,
+    baseline_start_date: str = None,
+    baseline_end_date: str = None,
+    comparison_start_date: str = None,
+    comparison_end_date: str = None,
+    metric_for_comparison: str = None,
     group_by: Optional[str] = None,
     filter: Optional[str] = None,
     max_results: Optional[int] = None,
@@ -102,6 +111,7 @@ async def cost_comparison(
 
     Args:
         ctx: The MCP context object
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
         operation: The operation to perform: 'getCostAndUsageComparisons' or 'getCostComparisonDrivers'
         baseline_start_date: Baseline period start date in YYYY-MM-DD format (must be first day of month)
         baseline_end_date: Baseline period end date in YYYY-MM-DD format (must be first day of next month)
@@ -117,6 +127,12 @@ async def cost_comparison(
         Dict containing the cost comparison information
     """
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         await ctx.info(f'Cost comparison operation: {operation}')
 
         # Initialize Cost Explorer client using shared utility
@@ -157,6 +173,19 @@ async def cost_comparison(
                 f"Unsupported operation: {operation}. Use 'getCostAndUsageComparisons' or 'getCostComparisonDrivers'.",
             )
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Use shared error handler for consistent error reporting
         return await handle_aws_error(ctx, e, 'cost_comparison', 'Cost Explorer')

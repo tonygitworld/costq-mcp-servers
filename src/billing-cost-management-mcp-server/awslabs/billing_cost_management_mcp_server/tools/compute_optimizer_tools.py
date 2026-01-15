@@ -28,6 +28,14 @@ from botocore.exceptions import ClientError
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 compute_optimizer_server = FastMCP(
     name='compute-optimizer-tools', instructions='Tools for working with AWS Compute Optimizer API'
@@ -66,7 +74,8 @@ Common finding types include:
 )
 async def compute_optimizer(
     ctx: Context,
-    operation: str,
+    target_account_id: Optional[str] = None,
+    operation: str = None,
     max_results: Optional[int] = None,
     filters: Optional[str] = None,
     account_ids: Optional[str] = None,
@@ -76,11 +85,17 @@ async def compute_optimizer(
 
     Args:
         ctx: The MCP context
+        target_account_id: Target AWS account ID for credential initialization. If not provided, use default credentials.
         operation: The operation to perform (e.g., 'get_ec2_instance_recommendations')
         max_results: Maximum number of results to return (1-100)
         filters: Optional filter expression as JSON string
-        account_ids: Optional list of AWS account IDs as JSON array string
+        account_ids: Optional list of AWS account IDs as JSON array string to query recommendations for
         next_token: Optional pagination token from a previous response
+
+    **Parameter Notes**:
+    - target_account_id: Specifies which account's credentials to use (credential initialization)
+    - account_ids: Specifies which accounts' recommendations to query (business query)
+    - Both parameters can be used independently or together
 
     Returns:
         Dict containing the Compute Optimizer recommendations
@@ -89,6 +104,12 @@ async def compute_optimizer(
     ctx_logger = get_context_logger(ctx, __name__)
 
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         # Log the request
         await ctx_logger.info(f'Compute Optimizer operation: {operation}')
 
@@ -287,6 +308,19 @@ async def compute_optimizer(
         await ctx_logger.warning(f'Validation error in {operation}: {str(e)}')
         return error_details
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Add detailed logging for troubleshooting
         await ctx_logger.error(

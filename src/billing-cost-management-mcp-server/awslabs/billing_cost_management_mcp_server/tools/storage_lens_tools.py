@@ -37,6 +37,14 @@ from fastmcp import Context, FastMCP
 from typing import Any, Dict, List, Optional, TypedDict
 from urllib.parse import urlparse
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 # FastMCP server instance
 storage_lens_server = FastMCP(
@@ -767,6 +775,7 @@ Example queries:
 async def storage_lens_run_query(
     ctx: Context,
     query: str,
+    target_account_id: Optional[str] = None,
     manifest_location: Optional[str] = None,
     output_location: Optional[str] = None,
     database_name: Optional[str] = None,
@@ -777,6 +786,7 @@ async def storage_lens_run_query(
     Args:
         ctx: The MCP context
         query: SQL query to execute against the data (use {table} as a placeholder for the table name)
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
         manifest_location: S3 URI to manifest file or folder (overrides environment variable)
         output_location: S3 location for Athena query results (overrides environment variable)
         database_name: Athena database name (defaults to 'storage_lens_db')
@@ -786,6 +796,12 @@ async def storage_lens_run_query(
         Dict containing the query results and metadata
     """
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         # Log the request
         await ctx.info(f'Running Storage Lens query: {query}')
 
@@ -819,6 +835,19 @@ async def storage_lens_run_query(
 
         return result
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Use shared error handler for consistent error reporting
         return await handle_aws_error(ctx, e, 'storage_lens_run_query', 'Athena')

@@ -41,6 +41,14 @@ from datetime import datetime
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 recommendation_details_server = FastMCP(
     name='recommendation-details-tools',
@@ -68,17 +76,24 @@ When presenting the recommendation:
 4. Ensure all numeric values (costs, savings, metrics) are included
 5. Add natural language explanations to make the information more accessible""",
 )
-async def get_recommendation_details(ctx: Context, recommendation_id: str) -> Dict[str, Any]:
+async def get_recommendation_details(ctx: Context, recommendation_id: str, target_account_id: Optional[str] = None) -> Dict[str, Any]:
     """Get enhanced recommendation details with integrated data from multiple AWS services.
 
     Args:
         ctx: The MCP context object
         recommendation_id: ID of the recommendation to retrieve details for
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
 
     Returns:
         Dict containing the enhanced recommendation details
     """
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         await ctx.info(f'Getting recommendation details for: {recommendation_id}')
 
         # Get base recommendation from Cost Optimization Hub using shared utility
@@ -90,6 +105,19 @@ async def get_recommendation_details(ctx: Context, recommendation_id: str) -> Di
 
         return format_response('success', response)
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Use shared error handler for consistent error reporting
         return await handle_aws_error(

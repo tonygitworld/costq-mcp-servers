@@ -29,6 +29,14 @@ from datetime import datetime, timedelta
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 cost_anomaly_server = FastMCP(
     name='cost-anomaly-tools', instructions='Tools for working with AWS Cost Anomaly Detection API'
@@ -55,8 +63,9 @@ Feedback status options:
 )
 async def cost_anomaly(
     ctx: Context,
-    start_date: str,
-    end_date: str,
+    target_account_id: Optional[str] = None,
+    start_date: str = None,
+    end_date: str = None,
     monitor_arn: Optional[str] = None,
     feedback: Optional[str] = None,
     max_results: Optional[int] = None,
@@ -68,6 +77,7 @@ async def cost_anomaly(
 
     Args:
         ctx: The MCP context object
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
         start_date: Start date in YYYY-MM-DD format. Required.
         end_date: End date in YYYY-MM-DD format. Required.
         monitor_arn: Optional ARN of a specific cost anomaly monitor to filter results.
@@ -84,6 +94,12 @@ async def cost_anomaly(
     ctx_logger = get_context_logger(ctx, __name__)
 
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         # Validate date formats first
         if not validate_date_format(start_date):
             return format_response(
@@ -219,6 +235,20 @@ async def cost_anomaly(
         else:
             # Use shared error handler for other AWS errors
             raise
+
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Use shared error handler for other exceptions
         return await handle_aws_error(ctx, e, 'cost_anomaly', 'Cost Explorer')

@@ -37,6 +37,14 @@ from .cost_optimization_hub_helpers import (
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 cost_optimization_hub_server = FastMCP(
     name='cost-optimization-hub-tools',
@@ -101,7 +109,8 @@ Each recommendation includes:
 )
 async def cost_optimization_hub(
     ctx: Context,
-    operation: str,
+    target_account_id: Optional[str] = None,
+    operation: str = None,
     resource_id: Optional[str] = None,
     resource_type: Optional[str] = None,
     max_results: Optional[int] = None,
@@ -113,6 +122,7 @@ async def cost_optimization_hub(
 
     Args:
         ctx: The MCP context
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
         operation: The operation to perform ('list_recommendations', 'get_recommendation', or 'list_recommendation_summaries')
         resource_id: Resource ID for get_recommendation operation
         resource_type: Resource type for get_recommendation operation
@@ -129,6 +139,12 @@ async def cost_optimization_hub(
         a single response when multiple pages are available.
     """
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         # Log the request
         await ctx.info(f'Cost Optimization Hub operation: {operation}')
 
@@ -267,6 +283,19 @@ async def cost_optimization_hub(
                 f"Unsupported operation: {operation}. Use '{OPERATION_LIST_RECOMMENDATION_SUMMARIES}', '{OPERATION_LIST_RECOMMENDATIONS}', or '{OPERATION_GET_RECOMMENDATION}'.",
             )
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         await ctx.error(f'Error in Cost Optimization Hub operation {operation}: {str(e)}')
         return await handle_aws_error(ctx, e, operation, 'Cost Optimization Hub')

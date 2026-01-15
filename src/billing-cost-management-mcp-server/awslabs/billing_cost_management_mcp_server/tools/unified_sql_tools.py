@@ -26,6 +26,14 @@ from ..utilities.sql_utils import execute_session_sql
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, List, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 unified_sql_server = FastMCP(
     name='unified-sql-tools',
@@ -52,6 +60,7 @@ Common queries:
 async def session_sql(
     ctx: Context,
     query: str,
+    target_account_id: Optional[str] = None,
     schema: Optional[List[str]] = None,
     data: Optional[List[List[Any]]] = None,
     table_name: Optional[str] = None,
@@ -61,6 +70,7 @@ async def session_sql(
     Args:
         ctx: The MCP context object
         query: SQL query to execute
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
         schema: Optional column definitions for user data (e.g. ["service TEXT", "cost REAL"])
         data: Optional array of data rows to add to database before querying
         table_name: Optional name for user data table (auto-generated if not provided)
@@ -69,6 +79,12 @@ async def session_sql(
         Dict containing query results
     """
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         # Generate a table name if one is not provided but data is
         if data and schema and not table_name:
             table_name = f'user_data_{str(uuid.uuid4())[:8]}'
@@ -76,6 +92,19 @@ async def session_sql(
         # Use the shared SQL utility to execute the query
         return await execute_session_sql(ctx, query, schema, data, table_name)
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Use shared error handler for consistent error reporting
         return await handle_aws_error(ctx, e, 'session_sql', 'SQL')

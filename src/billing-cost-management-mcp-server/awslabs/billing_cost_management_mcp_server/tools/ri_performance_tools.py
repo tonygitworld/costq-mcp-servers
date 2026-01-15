@@ -28,6 +28,14 @@ from ..utilities.aws_service_base import (
 from fastmcp import Context, FastMCP
 from typing import Any, Dict, Optional
 
+# Import account context exceptions
+from entrypoint import (
+    AccountNotFoundError,
+    CredentialDecryptionError,
+    AssumeRoleError,
+    DatabaseConnectionError,
+)
+
 
 ri_performance_server = FastMCP(
     name='ri-performance-tools',
@@ -64,7 +72,8 @@ Reservation utilization can only be grouped by SUBSCRIPTION_ID.""",
 )
 async def ri_performance(
     ctx: Context,
-    operation: str,
+    target_account_id: Optional[str] = None,
+    operation: str = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     granularity: str = 'DAILY',
@@ -78,6 +87,7 @@ async def ri_performance(
 
     Args:
         ctx: The MCP context object
+        target_account_id: Target AWS account ID. If not provided, use default credentials.
         operation: The operation to perform: 'get_reservation_coverage' or 'get_reservation_utilization'
         start_date: Start date in YYYY-MM-DD format (inclusive). Defaults to 30 days ago if not provided.
         end_date: End date in YYYY-MM-DD format (exclusive). Defaults to today if not provided.
@@ -93,6 +103,12 @@ async def ri_performance(
         Dict containing the reservation coverage/utilization information
     """
     try:
+        # ===== Account context initialization =====
+        if target_account_id:
+            from entrypoint import _setup_account_context
+            await _setup_account_context(target_account_id)
+
+        # ===== Original logic (unchanged) =====
         await ctx.info(f'Reservation Coverage/Utilization operation: {operation}')
 
         # Initialize Cost Explorer client using shared utility
@@ -130,6 +146,19 @@ async def ri_performance(
                 f"Unsupported operation: {operation}. Use 'get_reservation_coverage' or 'get_reservation_utilization'.",
             )
 
+    # ===== Exception handling =====
+    except AccountNotFoundError:
+        return format_response('error', {'error_type': 'account_not_found'},
+                               'Account not found. Please check the account ID.')
+    except CredentialDecryptionError:
+        return format_response('error', {'error_type': 'credential_error'},
+                               'Failed to decrypt credentials. Please contact administrator.')
+    except AssumeRoleError:
+        return format_response('error', {'error_type': 'assume_role_error'},
+                               'Failed to assume role. Please check IAM role configuration.')
+    except DatabaseConnectionError:
+        return format_response('error', {'error_type': 'database_error'},
+                               'Database connection failed. Please try again later.')
     except Exception as e:
         # Use shared error handler for consistent error reporting
         return await handle_aws_error(ctx, e, 'ri_performance', 'Cost Explorer')
