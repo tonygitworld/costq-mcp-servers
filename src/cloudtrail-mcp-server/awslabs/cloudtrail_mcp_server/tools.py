@@ -77,6 +77,10 @@ class CloudTrailTools:
     async def lookup_events(
         self,
         ctx: Context,
+        target_account_id: Annotated[
+            Optional[str],
+            Field(description='Target AWS account ID for multi-account access'),
+        ] = None,
         start_time: Annotated[
             Optional[str],
             Field(
@@ -144,6 +148,11 @@ class CloudTrailTools:
             - query_params: Parameters used for the query (includes pagination parameters when next_token is present)
         """
         try:
+            # ✅ 账号上下文初始化
+            if target_account_id:
+                from entrypoint import _setup_account_context
+                await _setup_account_context(target_account_id)
+
             # Create CloudTrail client for the specified region
             cloudtrail_client = self._get_cloudtrail_client(region)
 
@@ -223,12 +232,16 @@ class CloudTrailTools:
     async def lake_query(
         self,
         ctx: Context,
+        target_account_id: Annotated[
+            Optional[str],
+            Field(description='Target AWS account ID for multi-account access'),
+        ] = None,
         sql: Annotated[
             str,
             Field(
                 description="SQL query to execute against CloudTrail Lake. IMPORTANT: You must include a valid Event Data Store (EDS) ID in the FROM clause of your SQL query. Use list_event_data_stores tool to get available EDS IDs first. CloudTrail Lake only supports SELECT statements using Trino-compatible SQL syntax. Example: SELECT * FROM 0233062b-51c6-4d18-8dec-a8c90da840d9 WHERE eventname = 'ConsoleLogin'"
             ),
-        ],
+        ] = None,
         wait_for_completion: Annotated[
             bool,
             Field(
@@ -363,6 +376,11 @@ class CloudTrailTools:
             - query_statistics: Performance statistics for the query
         """
         try:
+            # ✅ 账号上下文初始化
+            if target_account_id:
+                from entrypoint import _setup_account_context
+                await _setup_account_context(target_account_id)
+
             # Create CloudTrail client for the specified region
             cloudtrail_client = self._get_cloudtrail_client(region)
 
@@ -429,7 +447,11 @@ class CloudTrailTools:
     async def get_query_status(
         self,
         ctx: Context,
-        query_id: Annotated[str, Field(description='The ID of the query to check status for')],
+        target_account_id: Annotated[
+            Optional[str],
+            Field(description='Target AWS account ID for multi-account access'),
+        ] = None,
+        query_id: Annotated[str, Field(description='The ID of the query to check status for')] = None,
         region: Annotated[
             str,
             Field(description='AWS region to query. Defaults to us-east-1.'),
@@ -453,6 +475,11 @@ class CloudTrailTools:
             - error_message: Error details if the query failed
         """
         try:
+            # ✅ 账号上下文初始化
+            if target_account_id:
+                from entrypoint import _setup_account_context
+                await _setup_account_context(target_account_id)
+
             # Create CloudTrail client for the specified region
             cloudtrail_client = self._get_cloudtrail_client(region)
 
@@ -478,7 +505,11 @@ class CloudTrailTools:
     async def get_query_results(
         self,
         ctx: Context,
-        query_id: Annotated[str, Field(description='The ID of the query to get results for')],
+        target_account_id: Annotated[
+            Optional[str],
+            Field(description='Target AWS account ID for multi-account access'),
+        ] = None,
+        query_id: Annotated[str, Field(description='The ID of the query to get results for')] = None,
         max_results: Annotated[
             Optional[int],
             Field(description='Maximum number of results to return per page (1-50, default: 50)'),
@@ -517,6 +548,11 @@ class CloudTrailTools:
             - query_statistics: Performance statistics for the query
         """
         try:
+            # ✅ 账号上下文初始化
+            if target_account_id:
+                from entrypoint import _setup_account_context
+                await _setup_account_context(target_account_id)
+
             # Create CloudTrail client for the specified region
             cloudtrail_client = self._get_cloudtrail_client(region)
 
@@ -560,6 +596,10 @@ class CloudTrailTools:
     async def list_event_data_stores(
         self,
         ctx: Context,
+        target_account_id: Annotated[
+            Optional[str],
+            Field(description='Target AWS account ID for multi-account access'),
+        ] = None,
         include_details: Annotated[
             bool,
             Field(
@@ -584,6 +624,11 @@ class CloudTrailTools:
         List of available Event Data Stores with their configurations
         """
         try:
+            # ✅ 账号上下文初始化
+            if target_account_id:
+                from entrypoint import _setup_account_context
+                await _setup_account_context(target_account_id)
+
             # Create CloudTrail client for the specified region
             cloudtrail_client = self._get_cloudtrail_client(region)
 

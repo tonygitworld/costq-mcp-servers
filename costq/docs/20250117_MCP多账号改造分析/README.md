@@ -102,13 +102,32 @@ cat 04_改造自动化方案.md | grep -A 30 "批量改造"
 | `cred_extract_services/` | ✅ **可直接复制** | ❌ 无需修改 | 完全通用，自包含，不依赖项目代码 |
 | `Dockerfile-AgentCore-Runtime` | ✅ **可直接复制** | ❌ 无需修改 | 通用模板，使用相对路径和环境变量 |
 | `entrypoint.py` | ⚠️ **可复制但需修改** | ✅ 修改 1 行 | 需要修改导入路径：`from awslabs.<your_package>_mcp_server.server import mcp, setup` |
-| `costq/scripts/build_*.sh` | ⚠️ **可复制但需修改** | ✅ 修改 1 个变量 | 需要修改 `MCP_SERVER_NAME="<your-mcp-server-name>"` |
+| `costq/scripts/build_and_push_template.sh` | ✅ **可直接使用** | ❌ 无需修改 | 支持参数传递：`bash build_and_push_template.sh <mcp-server-name>` |
 
 **改造速度**：
 - ✅ **80% 文件可直接复制**（2 分钟）
 - ⚠️ **20% 需要简单修改**（3 分钟）
 - 🔧 **修改 Tool 函数**（5-10 分钟）
 - 🚀 **总计：10-15 分钟完成改造**
+
+**快速开始**：
+```bash
+# 1. 复制核心文件（2 分钟）
+cd src/<mcp-server-name>
+cp -r ../billing-cost-management-mcp-server/cred_extract_services ./
+cp ../billing-cost-management-mcp-server/entrypoint.py ./
+cp ../billing-cost-management-mcp-server/Dockerfile-AgentCore-Runtime ./
+
+# 2. 修改 entrypoint.py（1 行，30 秒）
+# 改: from awslabs.<your_package>_mcp_server.server import mcp, setup
+
+# 3. 修改 Tool 函数（5-10 分钟）
+# 添加 target_account_id 参数和上下文初始化
+
+# 4. 一键部署（1 分钟）
+cd ../..
+bash costq/scripts/build_and_push_template.sh <mcp-server-name>
+```
 
 ---
 
