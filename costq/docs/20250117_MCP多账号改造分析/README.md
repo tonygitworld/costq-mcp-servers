@@ -95,19 +95,36 @@ cat 04_改造自动化方案.md | grep -A 30 "批量改造"
 
 ---
 
+## 🎯 快速参考：哪些文件可以直接复制？
+
+| 文件/目录 | 是否可复制 | 需要修改 | 说明 |
+|-----------|-----------|---------|------|
+| `cred_extract_services/` | ✅ **可直接复制** | ❌ 无需修改 | 完全通用，自包含，不依赖项目代码 |
+| `Dockerfile-AgentCore-Runtime` | ✅ **可直接复制** | ❌ 无需修改 | 通用模板，使用相对路径和环境变量 |
+| `entrypoint.py` | ⚠️ **可复制但需修改** | ✅ 修改 1 行 | 需要修改导入路径：`from awslabs.<your_package>_mcp_server.server import mcp, setup` |
+| `costq/scripts/build_*.sh` | ⚠️ **可复制但需修改** | ✅ 修改 1 个变量 | 需要修改 `MCP_SERVER_NAME="<your-mcp-server-name>"` |
+
+**改造速度**：
+- ✅ **80% 文件可直接复制**（2 分钟）
+- ⚠️ **20% 需要简单修改**（3 分钟）
+- 🔧 **修改 Tool 函数**（5-10 分钟）
+- 🚀 **总计：10-15 分钟完成改造**
+
+---
+
 ## 📊 改造统计
 
 ### 已完成改造
 | MCP Server | 改造日期 | 状态 | 备注 |
 |-----------|---------|------|------|
-| billing-cost-management-mcp-server | 2025-01-15 | ✅ 已完成 | 参考实现 |
+| billing-cost-management-mcp-server | 2025-01-17 | ✅ 已完成 | 参考实现 |
 
 ### 待改造列表
 | MCP Server | 优先级 | 预计时间 | 备注 |
 |-----------|-------|---------|------|
-| cloudwatch-mcp-server | 高 | 10 分钟 | 使用自动化 |
-| s3-tables-mcp-server | 高 | 10 分钟 | 使用自动化 |
-| lambda-tool-mcp-server | 中 | 10 分钟 | 使用自动化 |
+| cloudwatch-mcp-server | 高 | 10 分钟 | 直接复制文件 |
+| s3-tables-mcp-server | 高 | 10 分钟 | 直接复制文件 |
+| lambda-tool-mcp-server | 中 | 10 分钟 | 直接复制文件 |
 | ... | ... | ... | ... |
 
 ---
@@ -130,6 +147,38 @@ cred_extract_services/
 - 查询数据库获取账号信息
 - 根据 auth_type 提取凭证（AKSK/IAM Role）
 - 设置 boto3 标准环境变量
+
+### 1.5 新增 Dockerfile-AgentCore-Runtime
+**目的**：构建专门用于 AgentCore Runtime 部署的 ARM64 镜像
+
+**关键内容**：
+- 复制 `entrypoint.py` 和 `cred_extract_services/`
+- 安装额外依赖（OpenTelemetry、SQLAlchemy、psycopg2、cryptography）
+- 使用 `opentelemetry-instrument` 启动
+- 配置 MCP 和 AWS 环境变量
+
+### 1.6 新增部署脚本
+**路径**：`costq/scripts/01-build_and_push_<mcp-server-name>.sh`
+
+**功能**：
+- 一键构建 ARM64 Docker 镜像
+- 自动登录 ECR
+- 打标签并推送到 ECR
+- 提供后续操作提示
+
+**使用**：
+```bash
+# 复制模板
+cp costq/scripts/build_and_push_template.sh \
+   costq/scripts/01-build_and_push_<mcp-server-name>.sh
+
+# 修改配置
+vim costq/scripts/01-build_and_push_<mcp-server-name>.sh
+# 修改 MCP_SERVER_NAME="<mcp-server-name>"
+
+# 执行部署
+bash costq/scripts/01-build_and_push_<mcp-server-name>.sh
+```
 
 ---
 
