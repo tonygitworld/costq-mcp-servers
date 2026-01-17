@@ -102,10 +102,10 @@ ENV UV_SYSTEM_PYTHON=1 \
     DOCKER_CONTAINER=1 \
     AWS_REGION=ap-northeast-1 \
     AWS_DEFAULT_REGION=ap-northeast-1 \
-    MCP_HOST=0.0.0.0 \
-    MCP_PORT=8000 \
-    MCP_STATELESS_HTTP=true \
-    MCP_TRANSPORT=streamable-http
+    FASTMCP_HOST=0.0.0.0 \
+    FASTMCP_PORT=8000 \
+    FASTMCP_STATELESS_HTTP=true \
+    FASTMCP_TRANSPORT=streamable-http
 
 # 安装额外的 Python 依赖（需要在切换用户前安装，因为需要 root 权限）
 # 使用 uv pip 安装到虚拟环境中
