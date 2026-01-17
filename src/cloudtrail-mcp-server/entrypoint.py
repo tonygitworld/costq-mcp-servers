@@ -145,12 +145,17 @@ def main():
         has_setup = False
         logger.info("ℹ️  MCP Server 没有 setup 函数，直接启动")
 
-    # 从环境变量读取传输配置
-    # FastMCP 会自动读取这些环境变量，我们只需要记录日志
-    transport = os.environ.get("FASTMCP_TRANSPORT", "streamable-http")
-    host = os.environ.get("FASTMCP_HOST", "0.0.0.0")
-    port = os.environ.get("FASTMCP_PORT", "8000")
-    stateless = os.environ.get("FASTMCP_STATELESS_HTTP", "true")
+    # 从环境变量读取传输配置（使用 MCP_* 前缀）
+    transport = os.environ.get("MCP_TRANSPORT", "streamable-http")
+    host = os.environ.get("MCP_HOST", "0.0.0.0")
+    port = os.environ.get("MCP_PORT", "8000")
+    stateless = os.environ.get("MCP_STATELESS_HTTP", "true")
+
+    # 设置 FastMCP 环境变量（FastMCP 内部使用 FASTMCP_* 前缀）
+    os.environ.setdefault("FASTMCP_TRANSPORT", transport)
+    os.environ.setdefault("FASTMCP_HOST", host)
+    os.environ.setdefault("FASTMCP_PORT", port)
+    os.environ.setdefault("FASTMCP_STATELESS_HTTP", stateless)
 
     logger.info(f"🚀 启动 MCP Server: transport={transport}, host={host}, port={port}, stateless={stateless}")
 
