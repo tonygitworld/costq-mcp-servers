@@ -146,26 +146,24 @@ def main():
         logger.info("ℹ️  MCP Server 没有 setup 函数，直接启动")
 
     # 从环境变量读取传输配置
+    # FastMCP 会自动读取这些环境变量，我们只需要记录日志
     transport = os.environ.get("FASTMCP_TRANSPORT", "streamable-http")
     host = os.environ.get("FASTMCP_HOST", "0.0.0.0")
-    port = int(os.environ.get("FASTMCP_PORT", "8000"))
-    stateless = os.environ.get("FASTMCP_STATELESS_HTTP", "true").lower() == "true"
+    port = os.environ.get("FASTMCP_PORT", "8000")
+    stateless = os.environ.get("FASTMCP_STATELESS_HTTP", "true")
 
-    logger.info(f"🚀 启动 MCP Server: transport={transport}, host={host}, port={port}")
+    logger.info(f"🚀 启动 MCP Server: transport={transport}, host={host}, port={port}, stateless={stateless}")
 
     # 如果有 setup 函数，先运行初始化
     if has_setup:
         logger.info("🔧 运行 setup 初始化...")
         asyncio.run(setup())
 
-    # 根据传输类型运行 server
-    if transport == "stdio":
-        logger.info("📡 使用 stdio 传输（本地测试模式）")
-        mcp.run(transport=transport)
-    else:
-        logger.info(f"📡 使用 {transport} 传输: http://{host}:{port}/mcp")
-        logger.info(f"   Stateless HTTP: {stateless}")
-        mcp.run(transport=transport, host=host, port=port, stateless_http=stateless)
+    # 运行 MCP Server
+    # FastMCP.run() 只接受 transport 和 mount_path 参数
+    # host, port, stateless_http 等配置通过环境变量读取
+    logger.info(f"📡 启动 {transport} 模式...")
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":
