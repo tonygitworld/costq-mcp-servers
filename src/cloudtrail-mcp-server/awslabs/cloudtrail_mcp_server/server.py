@@ -19,8 +19,10 @@ from loguru import logger
 from mcp.server.fastmcp import FastMCP
 
 
+# Create FastMCP server for AgentCore Runtime
+# AgentCore requires stateless HTTP servers on 0.0.0.0:8000/mcp
 mcp = FastMCP(
-    'awslabs.cloudtrail-mcp-server',
+    name='awslabs.cloudtrail-mcp-server',
     instructions='Use this MCP server to query AWS CloudTrail events for security investigations, compliance auditing, and operational troubleshooting. Supports event lookup by various attributes (username, event name, resource name, etc.), user activity analysis, API call tracking, and advanced CloudTrail Lake SQL queries for complex analytics. Can search the last 90 days of management events and provides detailed event summaries and activity analysis.',
     dependencies=[
         'boto3',
@@ -28,6 +30,8 @@ mcp = FastMCP(
         'pydantic',
         'loguru',
     ],
+    host="0.0.0.0",
+    stateless_http=True
 )
 
 # Initialize and register CloudTrail tools
@@ -41,8 +45,9 @@ except Exception as e:
 
 
 def main():
-    """Run the MCP server."""
-    mcp.run()
+    """Run the MCP server with streamable HTTP transport for AgentCore."""
+    # AgentCore Runtime expects servers to run with streamable-http transport
+    mcp.run(transport="streamable-http")
 
 
 if __name__ == '__main__':
