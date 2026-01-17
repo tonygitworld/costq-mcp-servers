@@ -20,6 +20,18 @@ import logging
 import os
 import sys
 
+# ⚠️ 重要：必须在导入任何 MCP 相关模块之前设置环境变量！
+# 从 MCP_* 读取并设置 FASTMCP_*（FastMCP 内部使用）
+_transport = os.environ.get("MCP_TRANSPORT", "streamable-http")
+_host = os.environ.get("MCP_HOST", "0.0.0.0")
+_port = os.environ.get("MCP_PORT", "8000")
+_stateless = os.environ.get("MCP_STATELESS_HTTP", "true")
+
+os.environ.setdefault("FASTMCP_TRANSPORT", _transport)
+os.environ.setdefault("FASTMCP_HOST", _host)
+os.environ.setdefault("FASTMCP_PORT", _port)
+os.environ.setdefault("FASTMCP_STATELESS_HTTP", _stateless)
+
 from cred_extract_services.context_manager import set_aws_credentials
 from cred_extract_services.credential_extractor import extract_aws_credentials
 from cred_extract_services.exceptions import (
@@ -145,17 +157,11 @@ def main():
         has_setup = False
         logger.info("ℹ️  MCP Server 没有 setup 函数，直接启动")
 
-    # 从环境变量读取传输配置（使用 MCP_* 前缀）
+    # 读取配置（FASTMCP_* 环境变量已在文件开头设置）
     transport = os.environ.get("MCP_TRANSPORT", "streamable-http")
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     port = os.environ.get("MCP_PORT", "8000")
     stateless = os.environ.get("MCP_STATELESS_HTTP", "true")
-
-    # 设置 FastMCP 环境变量（FastMCP 内部使用 FASTMCP_* 前缀）
-    os.environ.setdefault("FASTMCP_TRANSPORT", transport)
-    os.environ.setdefault("FASTMCP_HOST", host)
-    os.environ.setdefault("FASTMCP_PORT", port)
-    os.environ.setdefault("FASTMCP_STATELESS_HTTP", stateless)
 
     logger.info(f"🚀 启动 MCP Server: transport={transport}, host={host}, port={port}, stateless={stateless}")
 
