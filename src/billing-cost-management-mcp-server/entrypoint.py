@@ -90,13 +90,12 @@ async def _setup_account_context(
     # 1. 提取凭证
     credentials = await extract_aws_credentials(target_account_id)
 
-    # 2. 设置 ContextVar
+    # 2. 设置环境变量
     set_aws_credentials(
         access_key_id=credentials["access_key_id"],
         secret_access_key=credentials["secret_access_key"],
         session_token=credentials.get("session_token"),
         region=credentials["region"],
-        account_id=credentials["account_id"],
     )
 
     # 3. 返回脱敏信息（用于日志）

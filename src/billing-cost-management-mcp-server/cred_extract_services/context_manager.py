@@ -19,7 +19,6 @@ _ENV_ACCESS_KEY = 'AWS_ACCESS_KEY_ID'
 _ENV_SECRET_KEY = 'AWS_SECRET_ACCESS_KEY'
 _ENV_SESSION_TOKEN = 'AWS_SESSION_TOKEN'
 _ENV_REGION = 'AWS_DEFAULT_REGION'
-_ENV_ACCOUNT_ID = 'AWS_ACCOUNT_ID'  # 自定义，供业务使用
 
 
 def set_aws_credentials(
@@ -27,7 +26,6 @@ def set_aws_credentials(
     secret_access_key: str,
     session_token: Optional[str] = None,
     region: str = "us-east-1",
-    account_id: Optional[str] = None,
 ) -> None:
     """设置 AWS 凭证到环境变量
 
@@ -36,7 +34,6 @@ def set_aws_credentials(
         secret_access_key: AWS Secret Access Key
         session_token: AWS Session Token（临时凭证，可选）
         region: AWS 区域
-        account_id: AWS 账号 ID（可选）
     """
     os.environ[_ENV_ACCESS_KEY] = access_key_id
     os.environ[_ENV_SECRET_KEY] = secret_access_key
@@ -48,9 +45,6 @@ def set_aws_credentials(
         del os.environ[_ENV_SESSION_TOKEN]
 
     os.environ[_ENV_REGION] = region
-
-    if account_id:
-        os.environ[_ENV_ACCOUNT_ID] = account_id
 
     # ✅ 不记录任何凭证信息（包括 AccessKeyId 前缀）
     logger.info(f"✅ AWS 凭证已设置到环境变量: Region={region}")
