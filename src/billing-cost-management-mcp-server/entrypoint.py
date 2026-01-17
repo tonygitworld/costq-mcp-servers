@@ -20,18 +20,6 @@ import logging
 import os
 import sys
 
-# ⚠️ 重要：必须在导入任何 MCP 相关模块之前设置环境变量！
-# 从 MCP_* 读取并设置 FASTMCP_*（FastMCP 内部使用）
-_transport = os.environ.get("MCP_TRANSPORT", "streamable-http")
-_host = os.environ.get("MCP_HOST", "0.0.0.0")
-_port = os.environ.get("MCP_PORT", "8000")
-_stateless = os.environ.get("MCP_STATELESS_HTTP", "true")
-
-os.environ.setdefault("FASTMCP_TRANSPORT", _transport)
-os.environ.setdefault("FASTMCP_HOST", _host)
-os.environ.setdefault("FASTMCP_PORT", _port)
-os.environ.setdefault("FASTMCP_STATELESS_HTTP", _stateless)
-
 from cred_extract_services.context_manager import set_aws_credentials
 from cred_extract_services.credential_extractor import extract_aws_credentials
 from cred_extract_services.exceptions import (
@@ -149,28 +137,25 @@ def main():
     # 延迟导入，避免循环依赖
     from awslabs.billing_cost_management_mcp_server.server import mcp, setup
 
-    # 从环境变量读取传输配置（使用 MCP_* 前缀）
-    transport = os.environ.get("MCP_TRANSPORT", "streamable-http")
-    host = os.environ.get("MCP_HOST", "0.0.0.0")
-    port = os.environ.get("MCP_PORT", "8000")
-    stateless = os.environ.get("MCP_STATELESS_HTTP", "true")
+    # 从环境变量读取传输配置
+    transport = os.environ.get("FASTMCP_TRANSPORT", "streamable-http")
+    host = os.environ.get("FASTMCP_HOST", "0.0.0.0")
+    port = int(os.environ.get("FASTMCP_PORT", "8000"))
+    stateless = os.environ.get("FASTMCP_STATELESS_HTTP", "true").lower() == "true"
 
-    # 设置 FastMCP 环境变量（FastMCP 内部使用 FASTMCP_* 前缀）
-    os.environ.setdefault("FASTMCP_TRANSPORT", transport)
-    os.environ.setdefault("FASTMCP_HOST", host)
-    os.environ.setdefault("FASTMCP_PORT", port)
-    os.environ.setdefault("FASTMCP_STATELESS_HTTP", stateless)
-
-    logger.info(f"🚀 启动 MCP Server: transport={transport}, host={host}, port={port}, stateless={stateless}")
+    logger.info(f"🚀 启动 MCP Server: transport={transport}, host={host}, port={port}")
 
     # 运行 setup 初始化 server
     asyncio.run(setup())
 
-    # 运行 MCP Server
-    # FastMCP.run() 只接受 transport 和 mount_path 参数
-    # host, port, stateless_http 等配置通过环境变量读取
-    logger.info(f"📡 启动 {transport} 模式...")
-    mcp.run(transport=transport)
+    # 根据传输类型运行 server
+    if transport == "stdio":
+        logger.info("📡 使用 stdio 传输（本地测试模式）")
+        mcp.run(transport=transport)
+    else:
+        logger.info(f"📡 使用 {transport} 传输: http://{host}:{port}/mcp")
+        logger.info(f"   Stateless HTTP: {stateless}")
+        mcp.run(transport=transport, host=host, port=port, stateless_http=stateless)
 
 
 if __name__ == "__main__":
