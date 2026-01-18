@@ -83,8 +83,7 @@ RUN apk update && \
 # Copy application artifacts from build stage
 COPY --from=uv --chown=app:app /app/.venv /app/.venv
 
-# Copy entrypoint.py and cred_extract_services for AgentCore Runtime
-COPY --chown=app:app ./entrypoint.py /app/entrypoint.py
+# Copy cred_extract_services for AgentCore Runtime
 COPY --chown=app:app ./cred_extract_services /app/cred_extract_services
 
 # Get healthcheck script
@@ -101,11 +100,7 @@ ENV UV_SYSTEM_PYTHON=1 \
     UV_NO_PROGRESS=1 \
     DOCKER_CONTAINER=1 \
     AWS_REGION=ap-northeast-1 \
-    AWS_DEFAULT_REGION=ap-northeast-1 \
-    MCP_HOST=0.0.0.0 \
-    MCP_PORT=8000 \
-    MCP_STATELESS_HTTP=true \
-    MCP_TRANSPORT=streamable-http
+    AWS_DEFAULT_REGION=ap-northeast-1
 
 # 安装额外的 Python 依赖（需要在切换用户前安装，因为需要 root 权限）
 # 使用 uv pip 安装到虚拟环境中
@@ -127,4 +122,4 @@ USER app
 # When running the container, add --db-path and a bind mount to the host's db file
 HEALTHCHECK --interval=60s --timeout=10s --start-period=10s --retries=3 CMD ["docker-healthcheck.sh"]
 
-CMD ["opentelemetry-instrument", "python", "-m", "entrypoint"]
+CMD ["opentelemetry-instrument", "python", "-m", "awslabs.cloudtrail_mcp_server.server"]

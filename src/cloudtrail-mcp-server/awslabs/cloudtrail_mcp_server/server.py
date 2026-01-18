@@ -14,9 +14,34 @@
 
 """awslabs cloudtrail MCP Server implementation."""
 
+import logging
+
 from awslabs.cloudtrail_mcp_server.tools import CloudTrailTools
-from loguru import logger
 from mcp.server.fastmcp import FastMCP
+
+from cred_extract_services.context_manager import set_aws_credentials
+from cred_extract_services.credential_extractor import extract_aws_credentials
+from cred_extract_services.exceptions import (
+    AccountNotFoundError,
+    AssumeRoleError,
+    CredentialDecryptionError,
+    CredentialExtractionError,
+    DatabaseConnectionError,
+)
+
+logger = logging.getLogger(__name__)
+
+# 导出异常类，便于调用方捕获
+__all__ = [
+    "_setup_account_context",
+    "mcp",
+    "main",
+    "CredentialExtractionError",
+    "AccountNotFoundError",
+    "CredentialDecryptionError",
+    "AssumeRoleError",
+    "DatabaseConnectionError",
+]
 
 
 # Create FastMCP server for AgentCore Runtime
@@ -38,10 +63,73 @@ mcp = FastMCP(
 try:
     cloudtrail_tools = CloudTrailTools()
     cloudtrail_tools.register(mcp)
-    logger.info('CloudTrail tools registered successfully')
+    logger.info("CloudTrail tools registered successfully")
 except Exception as e:
-    logger.error(f'Error initializing CloudTrail tools: {str(e)}')
+    logger.error('Error initializing CloudTrail tools: %s', str(e))
     raise
+
+
+async def _setup_account_context(
+    target_account_id: str,
+) -> dict[str, str]:
+    """设置 AWS 凭证上下文
+
+    统一入口函数，完成以下操作：
+    1. 查询账号信息（自包含数据库查询）
+    2. 提取凭证（AKSK 解密 / IAM Role AssumeRole）
+    3. 设置环境变量
+
+    前置条件：
+        - target_account_id 已通过权限验证
+        - 调用方有权访问该账号
+
+    Args:
+        target_account_id: AWS 账号 ID（数据库主键）
+
+    Returns:
+        凭证信息字典（用于日志记录，已脱敏）
+        {
+            "account_id": "123456789012",
+            "account_alias": "production",
+            "auth_type": "iam_role",
+            "region": "us-east-1"
+        }
+
+    Raises:
+        AccountNotFoundError: 账号不存在
+        CredentialDecryptionError: 凭证解密失败
+        AssumeRoleError: AssumeRole 失败
+        DatabaseConnectionError: 数据库连接失败
+
+    环境变量：
+        DATABASE_URL: 数据库连接 URL（可选，与 RDS_SECRET_NAME 二选一）
+        RDS_SECRET_NAME: AWS Secrets Manager 密钥名称
+        ENCRYPTION_KEY: Fernet 加密密钥（Base64 编码）
+        AWS_REGION: AWS 区域（默认 us-east-1）
+    """
+    logger.info("开始设置 AWS 凭证上下文")
+
+    # 1. 提取凭证
+    credentials = await extract_aws_credentials(target_account_id)
+
+    # 2. 设置环境变量
+    set_aws_credentials(
+        access_key_id=credentials["access_key_id"],
+        secret_access_key=credentials["secret_access_key"],
+        session_token=credentials.get("session_token"),
+        region=credentials["region"],
+    )
+
+    # 3. 返回脱敏信息（用于日志）
+    cred_info = {
+        "account_id": credentials["account_id"],
+        "account_alias": credentials.get("alias", "Unknown"),
+        "auth_type": credentials["auth_type"],
+        "region": credentials["region"],
+    }
+
+    logger.info("AWS 凭证上下文设置完成: %s", cred_info)
+    return cred_info
 
 
 def main():
