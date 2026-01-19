@@ -150,7 +150,8 @@ class CloudTrailTools:
         try:
             # ✅ 账号上下文初始化
             if target_account_id:
-                from entrypoint import _setup_account_context
+                # 使用延迟导入避免循环依赖 (server.py 导入 tools.py)
+                from awslabs.cloudtrail_mcp_server.server import _setup_account_context
                 await _setup_account_context(target_account_id)
 
             # Create CloudTrail client for the specified region
@@ -378,7 +379,8 @@ class CloudTrailTools:
         try:
             # ✅ 账号上下文初始化
             if target_account_id:
-                from entrypoint import _setup_account_context
+                # 使用延迟导入避免循环依赖 (server.py 导入 tools.py)
+                from awslabs.cloudtrail_mcp_server.server import _setup_account_context
                 await _setup_account_context(target_account_id)
 
             # Create CloudTrail client for the specified region
@@ -477,7 +479,8 @@ class CloudTrailTools:
         try:
             # ✅ 账号上下文初始化
             if target_account_id:
-                from entrypoint import _setup_account_context
+                # 使用延迟导入避免循环依赖 (server.py 导入 tools.py)
+                from awslabs.cloudtrail_mcp_server.server import _setup_account_context
                 await _setup_account_context(target_account_id)
 
             # Create CloudTrail client for the specified region
@@ -550,7 +553,8 @@ class CloudTrailTools:
         try:
             # ✅ 账号上下文初始化
             if target_account_id:
-                from entrypoint import _setup_account_context
+                # 使用延迟导入避免循环依赖 (server.py 导入 tools.py)
+                from awslabs.cloudtrail_mcp_server.server import _setup_account_context
                 await _setup_account_context(target_account_id)
 
             # Create CloudTrail client for the specified region
@@ -626,7 +630,8 @@ class CloudTrailTools:
         try:
             # ✅ 账号上下文初始化
             if target_account_id:
-                from entrypoint import _setup_account_context
+                # 使用延迟导入避免循环依赖 (server.py 导入 tools.py)
+                from awslabs.cloudtrail_mcp_server.server import _setup_account_context
                 await _setup_account_context(target_account_id)
 
             # Create CloudTrail client for the specified region
