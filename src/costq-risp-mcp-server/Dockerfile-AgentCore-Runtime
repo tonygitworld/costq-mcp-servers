@@ -1,0 +1,86 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# CostQ RISP MCP Server - AgentCore Runtime Dockerfile
+# Optimized for minimal size and fast build
+
+# ============================================================================
+# Build Stage
+# ============================================================================
+FROM public.ecr.aws/docker/library/python:3.13-alpine@sha256:070342a0cc1011532c0e69972cce2bbc6cc633eba294bae1d12abea8bd05303b AS builder
+
+WORKDIR /app
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# 安装编译依赖（cryptography 和 psycopg2-binary 需要）
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    libffi-dev \
+    openssl-dev \
+    postgresql-dev
+
+# 创建虚拟环境
+RUN python -m venv /app/.venv
+
+# 安装 Python 依赖（单层安装，让 pip 处理依赖解析）
+RUN /app/.venv/bin/pip install --no-cache-dir \
+    boto3>=1.38.0 \
+    pydantic>=2.10.0 \
+    'mcp[cli]>=1.23.0' \
+    sqlalchemy>=2.0.0 \
+    psycopg2-binary>=2.9.0 \
+    cryptography>=41.0.0 \
+    aws-opentelemetry-distro==0.12.2
+
+# 复制应用代码
+COPY . /app
+
+# 清理 Python 缓存（在复制代码之后）
+RUN find /app -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true && \
+    find /app -type f -name '*.pyc' -delete 2>/dev/null || true
+
+# ============================================================================
+# Production Stage
+# ============================================================================
+FROM public.ecr.aws/docker/library/python:3.13-alpine@sha256:070342a0cc1011532c0e69972cce2bbc6cc633eba294bae1d12abea8bd05303b
+
+WORKDIR /app
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    AWS_REGION=ap-northeast-1 \
+    AWS_DEFAULT_REGION=ap-northeast-1
+
+# 安装运行时依赖
+RUN apk add --no-cache \
+    ca-certificates \
+    postgresql-libs \
+    libffi \
+    && update-ca-certificates
+
+# 创建应用用户
+RUN addgroup -g 1000 -S app && \
+    adduser -u 1000 -S app -G app -h /app
+
+# 从 builder 复制虚拟环境和应用代码
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --from=builder --chown=app:app /app /app
+
+# 切换到非 root 用户
+USER app
+
+# 暴露端口
+EXPOSE 8000 8080 9000
+
+# 健康检查（检查 MCP 端点是否响应）
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/mcp', timeout=5)" || exit 1
+
+# 启动命令（直接运行 server.py，与 cloudtrail 不同，因为我们没有包结构）
+CMD ["opentelemetry-instrument", "python", "server.py"]
