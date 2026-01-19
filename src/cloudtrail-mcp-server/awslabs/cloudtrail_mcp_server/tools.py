@@ -15,6 +15,7 @@
 """CloudTrail tools for MCP server."""
 
 import boto3
+import logging
 import os
 import time
 from awslabs.cloudtrail_mcp_server import MCP_SERVER_VERSION
@@ -29,10 +30,11 @@ from awslabs.cloudtrail_mcp_server.models import (
     QueryStatus,
 )
 from botocore.config import Config
-from loguru import logger
 from mcp.server.fastmcp import Context
 from pydantic import Field
 from typing import Annotated, Any, Dict, List, Literal, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class CloudTrailTools:

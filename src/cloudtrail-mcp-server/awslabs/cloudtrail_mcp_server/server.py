@@ -53,7 +53,6 @@ mcp = FastMCP(
         'boto3',
         'botocore',
         'pydantic',
-        'loguru',
     ],
     host="0.0.0.0",
     stateless_http=True
