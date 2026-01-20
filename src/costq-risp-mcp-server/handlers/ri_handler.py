@@ -16,30 +16,25 @@
 
 This module provides handler functions for Reserved Instance operations
 including utilization, coverage, and purchase recommendation analysis.
+
+Key design principle:
+- All tool functions use flat parameter signatures with Annotated types
+- No nested Pydantic models in function signatures (MCP Schema compatibility)
+- Compatible with AgentCore Gateway tools/list endpoint
 """
 
 import logging
-import os
-import sys
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
-logger = logging.getLogger(__name__)
 from mcp.server.fastmcp import Context
+from pydantic import Field
 
-# Import credential services from server
 from cred_extract_services import (
-    setup_account_context,
     AccountNotFoundError,
     AssumeRoleError,
     CredentialDecryptionError,
     DatabaseConnectionError,
-)
-
-from models.ri_models import (
-    ReservationCoverageParams,
-    ReservationPurchaseRecommendationParams,
-    # Simplified parameter models for handler functions
-    ReservationUtilizationParams,
+    setup_account_context,
 )
 from utils.aws_client import (
     call_aws_api_with_retry,
@@ -55,11 +50,45 @@ from utils.formatters import (
     format_success_response,
 )
 
-# Configure Loguru logging
+logger = logging.getLogger(__name__)
 
 
 async def get_reservation_utilization(
-    context: Context, params: ReservationUtilizationParams, target_account_id: Optional[str] = None
+    ctx: Context,
+    start_date: Annotated[str, Field(description="Start date in YYYY-MM-DD format")],
+    end_date: Annotated[str, Field(description="End date in YYYY-MM-DD format")],
+    granularity: Annotated[
+        Optional[str],
+        Field(description="Time granularity: DAILY or MONTHLY. Default is MONTHLY"),
+    ] = "MONTHLY",
+    group_by_subscription_id: Annotated[
+        Optional[bool],
+        Field(description="Group results by subscription ID. Cannot be used with granularity"),
+    ] = False,
+    filter_expression: Annotated[
+        Optional[dict],
+        Field(description="Filter expression for Cost Explorer API"),
+    ] = None,
+    sort_key: Annotated[
+        Optional[str],
+        Field(description="Sort key for results"),
+    ] = None,
+    sort_order: Annotated[
+        Optional[str],
+        Field(description="Sort order: ASCENDING or DESCENDING"),
+    ] = None,
+    max_results: Annotated[
+        Optional[int],
+        Field(description="Maximum number of results per page"),
+    ] = None,
+    next_page_token: Annotated[
+        Optional[str],
+        Field(description="Token for pagination"),
+    ] = None,
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Get Reserved Instance (RI) utilization analysis from AWS Cost Explorer.
 
@@ -90,17 +119,23 @@ async def get_reservation_utilization(
     - Useful for RI portfolio optimization
 
     Args:
-        context: MCP context
-        params: Parameters for RI utilization query (see ReservationUtilizationParams for details)
-        target_account_id: Optional AWS account ID for multi-account access
+        ctx: MCP context
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        granularity: Time granularity (DAILY or MONTHLY)
+        group_by_subscription_id: Group results by subscription ID
+        filter_expression: Filter expression for Cost Explorer API
+        sort_key: Sort key for results
+        sort_order: Sort order (ASCENDING or DESCENDING)
+        max_results: Maximum number of results per page
+        next_page_token: Token for pagination
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing RI utilization analysis with usage percentages and cost savings
     """
     operation = "get_reservation_utilization"
-    logger.info(
-        f"Starting {operation} for period {params.time_period.start_date} to {params.time_period.end_date}"
-    )
+    logger.info(f"Starting {operation} for period {start_date} to {end_date}")
 
     try:
         # 设置账号上下文（如果指定了目标账号）
@@ -124,7 +159,7 @@ async def get_reservation_utilization(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -134,41 +169,40 @@ async def get_reservation_utilization(
         # Build request parameters
         request_params = {
             "TimePeriod": {
-                "Start": format_date_for_api(params.time_period.start_date, params.granularity),
-                "End": format_date_for_api(params.time_period.end_date, params.granularity),
+                "Start": format_date_for_api(start_date, granularity),
+                "End": format_date_for_api(end_date, granularity),
             }
         }
 
         # Add optional parameters
         # ⚠️ 重要：Granularity 和 GroupBy 是互斥的，不能同时使用
-        if params.group_by_subscription_id:
+        if group_by_subscription_id:
             # 使用 GroupBy 时，不添加 Granularity 参数
             request_params["GroupBy"] = [{"Type": "DIMENSION", "Key": "SUBSCRIPTION_ID"}]
-        elif params.granularity:
+        elif granularity:
             # 只有在不使用 GroupBy 时，才添加 Granularity
-            request_params["Granularity"] = params.granularity
+            request_params["Granularity"] = granularity
 
-        if params.filter_expression:
-            # 注意：MatchOptions的处理已移至AWS客户端层预防性处理
-            request_params["Filter"] = params.filter_expression
+        if filter_expression:
+            request_params["Filter"] = filter_expression
 
-        if params.sort_key:
+        if sort_key:
             request_params["SortBy"] = {
-                "Key": params.sort_key,
-                "SortOrder": params.sort_order or "DESCENDING",
+                "Key": sort_key,
+                "SortOrder": sort_order or "DESCENDING",
             }
 
-        if params.max_results:
-            request_params["MaxResults"] = params.max_results
+        if max_results:
+            request_params["MaxResults"] = max_results
 
-        if params.next_page_token:
-            request_params["NextPageToken"] = params.next_page_token
+        if next_page_token:
+            request_params["NextPageToken"] = next_page_token
 
         logger.info("Making AWS API call: get_reservation_utilization")
 
         # ✅ 处理分页：循环调用 API 直到获取所有数据
         all_utilizations = []
-        current_token = params.next_page_token
+        current_token = next_page_token
         page_count = 0
 
         while True:
@@ -212,11 +246,11 @@ async def get_reservation_utilization(
             "pages_retrieved": page_count,  # ✅ 添加页数
             "request_parameters": {
                 "time_period": {
-                    "start_date": params.time_period.start_date,
-                    "end_date": params.time_period.end_date,
+                    "start_date": start_date,
+                    "end_date": end_date,
                 },
-                "granularity": params.granularity,
-                "grouped_by_subscription": params.group_by_subscription_id,
+                "granularity": granularity,
+                "grouped_by_subscription": group_by_subscription_id,
             },
         }
 
@@ -230,7 +264,44 @@ async def get_reservation_utilization(
 
 
 async def get_reservation_coverage(
-    context: Context, params: ReservationCoverageParams, target_account_id: Optional[str] = None
+    ctx: Context,
+    start_date: Annotated[str, Field(description="Start date in YYYY-MM-DD format")],
+    end_date: Annotated[str, Field(description="End date in YYYY-MM-DD format")],
+    granularity: Annotated[
+        Optional[str],
+        Field(description="Time granularity: DAILY or MONTHLY. Default is MONTHLY"),
+    ] = "MONTHLY",
+    group_by: Annotated[
+        Optional[list[str]],
+        Field(
+            description="Dimensions to group by: AZ, INSTANCE_TYPE, LINKED_ACCOUNT, PLATFORM, REGION, SERVICE, TENANCY. "
+            "Note: Cannot be used together with granularity"
+        ),
+    ] = None,
+    filter_expression: Annotated[
+        Optional[dict],
+        Field(description="Filter expression for Cost Explorer API"),
+    ] = None,
+    sort_key: Annotated[
+        Optional[str],
+        Field(description="Sort key for results"),
+    ] = None,
+    sort_order: Annotated[
+        Optional[str],
+        Field(description="Sort order: ASCENDING or DESCENDING"),
+    ] = None,
+    max_results: Annotated[
+        Optional[int],
+        Field(description="Maximum number of results per page"),
+    ] = None,
+    next_page_token: Annotated[
+        Optional[str],
+        Field(description="Token for pagination"),
+    ] = None,
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Get Reserved Instance (RI) coverage analysis from AWS Cost Explorer.
 
@@ -260,17 +331,23 @@ async def get_reservation_coverage(
     - Useful for RI purchase planning and optimization
 
     Args:
-        context: MCP context
-        params: Parameters for RI coverage query (see ReservationCoverageParams for details)
-        target_account_id: Optional AWS account ID for multi-account access
+        ctx: MCP context
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        granularity: Time granularity (DAILY or MONTHLY)
+        group_by: Dimensions to group by (cannot be used with granularity)
+        filter_expression: Filter expression for Cost Explorer API
+        sort_key: Sort key for results
+        sort_order: Sort order (ASCENDING or DESCENDING)
+        max_results: Maximum number of results per page
+        next_page_token: Token for pagination
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing RI coverage analysis with coverage percentages and uncovered usage
     """
     operation = "get_reservation_coverage"
-    logger.info(
-        f"Starting {operation} for period {params.time_period.start_date} to {params.time_period.end_date}"
-    )
+    logger.info(f"Starting {operation} for period {start_date} to {end_date}")
 
     try:
         # 设置账号上下文（如果指定了目标账号）
@@ -294,7 +371,7 @@ async def get_reservation_coverage(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -304,43 +381,42 @@ async def get_reservation_coverage(
         # Build request parameters
         request_params = {
             "TimePeriod": {
-                "Start": format_date_for_api(params.time_period.start_date, params.granularity),
-                "End": format_date_for_api(params.time_period.end_date, params.granularity),
+                "Start": format_date_for_api(start_date, granularity),
+                "End": format_date_for_api(end_date, granularity),
             }
         }
 
         # Add optional parameters
         # ⚠️ 重要：Granularity 和 GroupBy 是互斥的，不能同时使用
-        if params.group_by:
+        if group_by:
             # 使用 GroupBy 时，不添加 Granularity 参数
             request_params["GroupBy"] = [
-                {"Type": "DIMENSION", "Key": key} for key in params.group_by
+                {"Type": "DIMENSION", "Key": key} for key in group_by
             ]
-        elif params.granularity:
+        elif granularity:
             # 只有在不使用 GroupBy 时，才添加 Granularity
-            request_params["Granularity"] = params.granularity
+            request_params["Granularity"] = granularity
 
-        if params.filter_expression:
-            # 注意：MatchOptions的处理已移至AWS客户端层预防性处理
-            request_params["Filter"] = params.filter_expression
+        if filter_expression:
+            request_params["Filter"] = filter_expression
 
-        if params.sort_key:
+        if sort_key:
             request_params["SortBy"] = {
-                "Key": params.sort_key,
-                "SortOrder": params.sort_order or "DESCENDING",
+                "Key": sort_key,
+                "SortOrder": sort_order or "DESCENDING",
             }
 
-        if params.max_results:
-            request_params["MaxResults"] = params.max_results
+        if max_results:
+            request_params["MaxResults"] = max_results
 
-        if params.next_page_token:
-            request_params["NextPageToken"] = params.next_page_token
+        if next_page_token:
+            request_params["NextPageToken"] = next_page_token
 
         logger.info("Making AWS API call: get_reservation_coverage")
 
         # ✅ 处理分页：循环调用 API 直到获取所有数据
         all_coverages = []
-        current_token = params.next_page_token
+        current_token = next_page_token
         page_count = 0
 
         while True:
@@ -384,11 +460,11 @@ async def get_reservation_coverage(
             "pages_retrieved": page_count,  # ✅ 添加页数
             "request_parameters": {
                 "time_period": {
-                    "start_date": params.time_period.start_date,
-                    "end_date": params.time_period.end_date,
+                    "start_date": start_date,
+                    "end_date": end_date,
                 },
-                "granularity": params.granularity,
-                "group_by": params.group_by,
+                "granularity": granularity,
+                "group_by": group_by,
             },
         }
 
@@ -402,7 +478,46 @@ async def get_reservation_coverage(
 
 
 async def get_reservation_purchase_recommendation(
-    context: Context, params: ReservationPurchaseRecommendationParams, target_account_id: Optional[str] = None
+    ctx: Context,
+    service: Annotated[
+        str,
+        Field(
+            description="AWS service: Amazon Elastic Compute Cloud - Compute, Amazon Relational Database Service, "
+            "Amazon ElastiCache, Amazon Redshift, Amazon OpenSearch Service, Amazon DynamoDB, etc."
+        ),
+    ],
+    account_scope: Annotated[
+        Optional[str],
+        Field(description="Account scope: PAYER or LINKED"),
+    ] = None,
+    lookback_period_in_days: Annotated[
+        Optional[str],
+        Field(description="Lookback period: SEVEN_DAYS, THIRTY_DAYS, or SIXTY_DAYS"),
+    ] = "THIRTY_DAYS",
+    term_in_years: Annotated[
+        Optional[str],
+        Field(description="Term in years: ONE_YEAR or THREE_YEARS"),
+    ] = "ONE_YEAR",
+    payment_option: Annotated[
+        Optional[str],
+        Field(description="Payment option: NO_UPFRONT, PARTIAL_UPFRONT, or ALL_UPFRONT"),
+    ] = "NO_UPFRONT",
+    service_specification: Annotated[
+        Optional[dict],
+        Field(description="Service-specific parameters for EC2 recommendations"),
+    ] = None,
+    page_size: Annotated[
+        Optional[int],
+        Field(description="Number of recommendations per page"),
+    ] = None,
+    next_page_token: Annotated[
+        Optional[str],
+        Field(description="Token for pagination"),
+    ] = None,
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Get Reserved Instance (RI) purchase recommendations from AWS Cost Explorer.
 
@@ -434,9 +549,16 @@ async def get_reservation_purchase_recommendation(
     - Can generate per-account (LINKED) or organization-wide (PAYER) recommendations
 
     Args:
-        context: MCP context
-        params: Parameters for RI purchase recommendation query (see ReservationPurchaseRecommendationParams for details)
-        target_account_id: Optional AWS account ID for multi-account access
+        ctx: MCP context
+        service: AWS service name
+        account_scope: Account scope (PAYER or LINKED)
+        lookback_period_in_days: Lookback period (SEVEN_DAYS, THIRTY_DAYS, SIXTY_DAYS)
+        term_in_years: Term in years (ONE_YEAR or THREE_YEARS)
+        payment_option: Payment option (NO_UPFRONT, PARTIAL_UPFRONT, ALL_UPFRONT)
+        service_specification: Service-specific parameters for EC2
+        page_size: Number of recommendations per page
+        next_page_token: Token for pagination
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing RI purchase recommendations with estimated savings and costs
@@ -447,7 +569,7 @@ async def get_reservation_purchase_recommendation(
         - Recommendations are based on historical usage, not forecasted usage
     """
     operation = "get_reservation_purchase_recommendation"
-    logger.info(f"Starting {operation} for service {params.service}")
+    logger.info(f"Starting {operation} for service {service}")
 
     try:
         # 设置账号上下文（如果指定了目标账号）
@@ -471,7 +593,7 @@ async def get_reservation_purchase_recommendation(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -479,44 +601,44 @@ async def get_reservation_purchase_recommendation(
         ce_client = get_cost_explorer_client()
 
         # 验证并映射服务名称
-        if not validate_service_name(params.service):
+        if not validate_service_name(service):
             return format_error_response(
-                error=Exception(f"Invalid service: {params.service}"), operation=operation
+                error=Exception(f"Invalid service: {service}"), operation=operation
             )
 
         # 映射服务名称到AWS API要求的格式
-        mapped_service = map_service_name(params.service)
+        mapped_service = map_service_name(service)
 
         # Build request parameters
         request_params = {"Service": mapped_service}
 
         # Add optional parameters
-        if params.account_scope:
-            request_params["AccountScope"] = params.account_scope
+        if account_scope:
+            request_params["AccountScope"] = account_scope
 
-        if params.lookback_period_in_days:
-            request_params["LookbackPeriodInDays"] = params.lookback_period_in_days
+        if lookback_period_in_days:
+            request_params["LookbackPeriodInDays"] = lookback_period_in_days
 
-        if params.term_in_years:
-            request_params["TermInYears"] = params.term_in_years
+        if term_in_years:
+            request_params["TermInYears"] = term_in_years
 
-        if params.payment_option:
-            request_params["PaymentOption"] = params.payment_option
+        if payment_option:
+            request_params["PaymentOption"] = payment_option
 
-        if params.service_specification:
-            request_params["ServiceSpecification"] = params.service_specification
+        if service_specification:
+            request_params["ServiceSpecification"] = service_specification
 
-        if params.page_size:
-            request_params["PageSize"] = params.page_size
+        if page_size:
+            request_params["PageSize"] = page_size
 
-        if params.next_page_token:
-            request_params["NextPageToken"] = params.next_page_token
+        if next_page_token:
+            request_params["NextPageToken"] = next_page_token
 
         logger.info("Making AWS API call: get_reservation_purchase_recommendation")
 
         # ✅ 处理分页：循环调用 API 直到获取所有数据
         all_details = []
-        current_token = params.next_page_token
+        current_token = next_page_token
         page_count = 0
 
         while True:
@@ -613,11 +735,11 @@ async def get_reservation_purchase_recommendation(
             "total_count": len(all_details),  # ✅ 添加总数
             "pages_retrieved": page_count,  # ✅ 添加页数
             "request_parameters": {
-                "service": params.service,
-                "account_scope": params.account_scope,
-                "lookback_period": params.lookback_period_in_days,
-                "term_in_years": params.term_in_years,
-                "payment_option": params.payment_option,
+                "service": service,
+                "account_scope": account_scope,
+                "lookback_period": lookback_period_in_days,
+                "term_in_years": term_in_years,
+                "payment_option": payment_option,
             },
         }
 

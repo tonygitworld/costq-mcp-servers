@@ -151,11 +151,13 @@ coverage analysis, and intelligent purchase recommendations.
 """
 
 # Create FastMCP server with instructions and AgentCore Runtime configuration
+# NOTE: Server name follows awslabs naming convention for AgentCore Gateway compatibility
 app = FastMCP(
-    name="AWS RISP MCP Server",
+    name="awslabs.costq-risp-mcp-server",
     instructions=SERVER_INSTRUCTIONS,
     host="0.0.0.0",           # AgentCore Runtime 要求
-    stateless_http=True       # AgentCore Runtime 要求
+    stateless_http=True,       # AgentCore Runtime 要求
+    port=8000
 )
 
 

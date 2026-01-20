@@ -16,29 +16,25 @@
 
 This module provides handler functions for Savings Plans operations
 including utilization, coverage, and purchase recommendation analysis.
+
+Key design principle:
+- All tool functions use flat parameter signatures with Annotated types
+- No nested Pydantic models in function signatures (MCP Schema compatibility)
+- Compatible with AgentCore Gateway tools/list endpoint
 """
 
 import logging
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
-logger = logging.getLogger(__name__)
 from mcp.server.fastmcp import Context
+from pydantic import Field
 
-# Import credential services from server
 from cred_extract_services import (
-    setup_account_context,
     AccountNotFoundError,
     AssumeRoleError,
     CredentialDecryptionError,
     DatabaseConnectionError,
-)
-
-from models.sp_models import (
-    SavingsPlansCoverageParams,
-    SavingsPlansPurchaseRecommendationParams,
-    SavingsPlansUtilizationDetailsParams,
-    # Simplified parameter models for handler functions
-    SavingsPlansUtilizationParams,
+    setup_account_context,
 )
 from utils.aws_client import call_aws_api_with_retry, get_cost_explorer_client
 from utils.formatters import (
@@ -51,9 +47,44 @@ from utils.formatters import (
     format_success_response,
 )
 
+logger = logging.getLogger(__name__)
+
 
 async def get_savings_plans_utilization(
-    context: Context, params: SavingsPlansUtilizationParams, target_account_id: Optional[str] = None
+    ctx: Context,
+    start_date: Annotated[str, Field(description="Start date in YYYY-MM-DD format")],
+    end_date: Annotated[str, Field(description="End date in YYYY-MM-DD format")],
+    granularity: Annotated[
+        Optional[str],
+        Field(description="Time granularity: DAILY or MONTHLY. Default is MONTHLY"),
+    ] = "MONTHLY",
+    filter_expression: Annotated[
+        Optional[dict],
+        Field(
+            description="Filter expression for Cost Explorer API. "
+            "Supported dimensions: LINKED_ACCOUNT, SAVINGS_PLAN_ARN, SAVINGS_PLANS_TYPE, REGION, PAYMENT_OPTION, INSTANCE_TYPE_FAMILY"
+        ),
+    ] = None,
+    sort_key: Annotated[
+        Optional[str],
+        Field(description="Sort key for results"),
+    ] = None,
+    sort_order: Annotated[
+        Optional[str],
+        Field(description="Sort order: ASCENDING or DESCENDING"),
+    ] = None,
+    max_results: Annotated[
+        Optional[int],
+        Field(description="Maximum number of results to return per page"),
+    ] = None,
+    next_page_token: Annotated[
+        Optional[str],
+        Field(description="Token for pagination"),
+    ] = None,
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Get Savings Plans (SP) utilization analysis from AWS Cost Explorer.
 
@@ -110,17 +141,22 @@ async def get_savings_plans_utilization(
     - Savings Plans and Reserved Instances are different pricing models
 
     Args:
-        context: MCP context
-        params: Parameters for SP utilization query (see SavingsPlansUtilizationParams for details)
-        target_account_id: Optional AWS account ID for multi-account access
+        ctx: MCP context
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        granularity: Time granularity (DAILY or MONTHLY)
+        filter_expression: Filter expression for Cost Explorer API
+        sort_key: Sort key for results
+        sort_order: Sort order (ASCENDING or DESCENDING)
+        max_results: Maximum number of results per page
+        next_page_token: Token for pagination
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing utilization analysis results
     """
     operation = "get_savings_plans_utilization"
-    logger.info(
-        f"Starting {operation} for period {params.time_period.start_date} to {params.time_period.end_date}"
-    )
+    logger.info(f"Starting {operation} for period {start_date} to {end_date}")
 
     try:
         # 设置账号上下文（如果指定了目标账号）
@@ -144,7 +180,7 @@ async def get_savings_plans_utilization(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -154,36 +190,35 @@ async def get_savings_plans_utilization(
         # Build request parameters
         request_params = {
             "TimePeriod": {
-                "Start": format_date_for_api(params.time_period.start_date, params.granularity),
-                "End": format_date_for_api(params.time_period.end_date, params.granularity),
+                "Start": format_date_for_api(start_date, granularity),
+                "End": format_date_for_api(end_date, granularity),
             }
         }
 
         # Add optional parameters
-        if params.granularity:
-            request_params["Granularity"] = params.granularity
+        if granularity:
+            request_params["Granularity"] = granularity
 
-        if params.filter_expression:
-            # 注意：MatchOptions的处理已移至AWS客户端层预防性处理
-            request_params["Filter"] = params.filter_expression
+        if filter_expression:
+            request_params["Filter"] = filter_expression
 
-        if params.sort_key:
+        if sort_key:
             request_params["SortBy"] = {
-                "Key": params.sort_key,
-                "SortOrder": params.sort_order or "DESCENDING",
+                "Key": sort_key,
+                "SortOrder": sort_order or "DESCENDING",
             }
 
-        if params.max_results:
-            request_params["MaxResults"] = params.max_results
+        if max_results:
+            request_params["MaxResults"] = max_results
 
-        if params.next_page_token:
-            request_params["NextPageToken"] = params.next_page_token
+        if next_page_token:
+            request_params["NextPageToken"] = next_page_token
 
         logger.info("Making AWS API call: get_savings_plans_utilization")
 
         # ✅ 处理分页：循环调用 API 直到获取所有数据
         all_utilizations_by_time = []
-        current_token = params.next_page_token
+        current_token = next_page_token
         page_count = 0
 
         while True:
@@ -227,10 +262,10 @@ async def get_savings_plans_utilization(
             "pages_retrieved": page_count,  # ✅ 添加页数
             "request_parameters": {
                 "time_period": {
-                    "start_date": params.time_period.start_date,
-                    "end_date": params.time_period.end_date,
+                    "start_date": start_date,
+                    "end_date": end_date,
                 },
-                "granularity": params.granularity,
+                "granularity": granularity,
             },
         }
 
@@ -244,7 +279,47 @@ async def get_savings_plans_utilization(
 
 
 async def get_savings_plans_coverage(
-    context: Context, params: SavingsPlansCoverageParams, target_account_id: Optional[str] = None
+    ctx: Context,
+    start_date: Annotated[str, Field(description="Start date in YYYY-MM-DD format")],
+    end_date: Annotated[str, Field(description="End date in YYYY-MM-DD format")],
+    granularity: Annotated[
+        Optional[str],
+        Field(description="Time granularity: DAILY or MONTHLY. Default is MONTHLY"),
+    ] = "MONTHLY",
+    group_by: Annotated[
+        Optional[list[str]],
+        Field(
+            description="Dimensions to group by: INSTANCE_FAMILY, REGION, SERVICE. "
+            "Note: Cannot be used together with granularity"
+        ),
+    ] = None,
+    filter_expression: Annotated[
+        Optional[dict],
+        Field(
+            description="Filter expression for Cost Explorer API. "
+            "Supported dimensions: LINKED_ACCOUNT, REGION, SERVICE, INSTANCE_FAMILY"
+        ),
+    ] = None,
+    sort_key: Annotated[
+        Optional[str],
+        Field(description="Sort key for results"),
+    ] = None,
+    sort_order: Annotated[
+        Optional[str],
+        Field(description="Sort order: ASCENDING or DESCENDING"),
+    ] = None,
+    max_results: Annotated[
+        Optional[int],
+        Field(description="Maximum number of results to return per page"),
+    ] = None,
+    next_page_token: Annotated[
+        Optional[str],
+        Field(description="Token for pagination"),
+    ] = None,
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Get Savings Plans (SP) coverage analysis from AWS Cost Explorer.
 
@@ -302,17 +377,23 @@ async def get_savings_plans_coverage(
     - Use get_savings_plans_utilization when you need to filter by SAVINGS_PLANS_TYPE
 
     Args:
-        context: MCP context
-        params: Parameters for SP coverage query (see SavingsPlansCoverageParams for details)
-        target_account_id: Optional AWS account ID for multi-account access
+        ctx: MCP context
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        granularity: Time granularity (DAILY or MONTHLY)
+        group_by: Dimensions to group by (cannot be used with granularity)
+        filter_expression: Filter expression for Cost Explorer API
+        sort_key: Sort key for results
+        sort_order: Sort order (ASCENDING or DESCENDING)
+        max_results: Maximum number of results per page
+        next_page_token: Token for pagination
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing SP coverage analysis with coverage percentages and uncovered spend
     """
     operation = "get_savings_plans_coverage"
-    logger.info(
-        f"Starting {operation} for period {params.time_period.start_date} to {params.time_period.end_date}"
-    )
+    logger.info(f"Starting {operation} for period {start_date} to {end_date}")
 
     try:
         # 设置账号上下文（如果指定了目标账号）
@@ -336,7 +417,7 @@ async def get_savings_plans_coverage(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -346,43 +427,42 @@ async def get_savings_plans_coverage(
         # Build request parameters
         request_params = {
             "TimePeriod": {
-                "Start": format_date_for_api(params.time_period.start_date, params.granularity),
-                "End": format_date_for_api(params.time_period.end_date, params.granularity),
+                "Start": format_date_for_api(start_date, granularity),
+                "End": format_date_for_api(end_date, granularity),
             }
         }
 
         # Add optional parameters
         # ⚠️ 重要：Granularity 和 GroupBy 是互斥的，不能同时使用
-        if params.group_by:
+        if group_by:
             # 使用 GroupBy 时，不添加 Granularity 参数
             request_params["GroupBy"] = [
-                {"Type": "DIMENSION", "Key": key} for key in params.group_by
+                {"Type": "DIMENSION", "Key": key} for key in group_by
             ]
-        elif params.granularity:
+        elif granularity:
             # 只有在不使用 GroupBy 时，才添加 Granularity
-            request_params["Granularity"] = params.granularity
+            request_params["Granularity"] = granularity
 
-        if params.filter_expression:
-            # 注意：MatchOptions的处理已移至AWS客户端层预防性处理
-            request_params["Filter"] = params.filter_expression
+        if filter_expression:
+            request_params["Filter"] = filter_expression
 
-        if params.sort_key:
+        if sort_key:
             request_params["SortBy"] = {
-                "Key": params.sort_key,
-                "SortOrder": params.sort_order or "DESCENDING",
+                "Key": sort_key,
+                "SortOrder": sort_order or "DESCENDING",
             }
 
-        if params.max_results:
-            request_params["MaxResults"] = params.max_results
+        if max_results:
+            request_params["MaxResults"] = max_results
 
-        if params.next_page_token:
-            request_params["NextPageToken"] = params.next_page_token
+        if next_page_token:
+            request_params["NextPageToken"] = next_page_token
 
         logger.info("Making AWS API call: get_savings_plans_coverage")
 
         # ✅ 处理分页：循环调用 API 直到获取所有数据
         all_coverages_by_time = []
-        current_token = params.next_page_token
+        current_token = next_page_token
         page_count = 0
 
         while True:
@@ -426,11 +506,11 @@ async def get_savings_plans_coverage(
             "pages_retrieved": page_count,  # ✅ 添加页数
             "request_parameters": {
                 "time_period": {
-                    "start_date": params.time_period.start_date,
-                    "end_date": params.time_period.end_date,
+                    "start_date": start_date,
+                    "end_date": end_date,
                 },
-                "granularity": params.granularity,
-                "group_by": params.group_by,
+                "granularity": granularity,
+                "group_by": group_by,
             },
         }
 
@@ -444,7 +524,45 @@ async def get_savings_plans_coverage(
 
 
 async def get_savings_plans_purchase_recommendation(
-    context: Context, params: SavingsPlansPurchaseRecommendationParams, target_account_id: Optional[str] = None
+    ctx: Context,
+    savings_plans_type: Annotated[
+        str,
+        Field(
+            description="Type of Savings Plans: COMPUTE_SP, EC2_INSTANCE_SP, SAGEMAKER_SP, or DATABASE_SP"
+        ),
+    ],
+    term_in_years: Annotated[
+        str,
+        Field(description="Term in years: ONE_YEAR or THREE_YEARS"),
+    ] = "ONE_YEAR",
+    payment_option: Annotated[
+        str,
+        Field(description="Payment option: NO_UPFRONT, PARTIAL_UPFRONT, or ALL_UPFRONT"),
+    ] = "NO_UPFRONT",
+    lookback_period_in_days: Annotated[
+        str,
+        Field(description="Lookback period: SEVEN_DAYS, THIRTY_DAYS, or SIXTY_DAYS"),
+    ] = "THIRTY_DAYS",
+    account_scope: Annotated[
+        Optional[str],
+        Field(description="Account scope: PAYER or LINKED"),
+    ] = None,
+    filter_expression: Annotated[
+        Optional[dict],
+        Field(description="Filter expression for Cost Explorer API"),
+    ] = None,
+    page_size: Annotated[
+        Optional[int],
+        Field(description="Number of recommendations per page"),
+    ] = None,
+    next_page_token: Annotated[
+        Optional[str],
+        Field(description="Token for pagination"),
+    ] = None,
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Get Savings Plans (SP) purchase recommendations from AWS Cost Explorer.
 
@@ -478,9 +596,16 @@ async def get_savings_plans_purchase_recommendation(
     - More flexible than Reserved Instances (applies across instance families, sizes, regions)
 
     Args:
-        context: MCP context
-        params: Parameters for SP purchase recommendation query (see SavingsPlansPurchaseRecommendationParams for details)
-        target_account_id: Optional AWS account ID for multi-account access
+        ctx: MCP context
+        savings_plans_type: Type of Savings Plans (COMPUTE_SP, EC2_INSTANCE_SP, SAGEMAKER_SP, DATABASE_SP)
+        term_in_years: Term in years (ONE_YEAR or THREE_YEARS)
+        payment_option: Payment option (NO_UPFRONT, PARTIAL_UPFRONT, ALL_UPFRONT)
+        lookback_period_in_days: Lookback period (SEVEN_DAYS, THIRTY_DAYS, SIXTY_DAYS)
+        account_scope: Account scope (PAYER or LINKED)
+        filter_expression: Filter expression for Cost Explorer API
+        page_size: Number of recommendations per page
+        next_page_token: Token for pagination
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing SP purchase recommendations with estimated savings and costs
@@ -492,7 +617,7 @@ async def get_savings_plans_purchase_recommendation(
         - Recommendations are based on historical usage, not forecasted usage
     """
     operation = "get_savings_plans_purchase_recommendation"
-    logger.info(f"Starting {operation} for {params.savings_plans_type}")
+    logger.info(f"Starting {operation} for {savings_plans_type}")
 
     try:
         # 设置账号上下文（如果指定了目标账号）
@@ -516,7 +641,7 @@ async def get_savings_plans_purchase_recommendation(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -525,31 +650,30 @@ async def get_savings_plans_purchase_recommendation(
 
         # Build request parameters
         request_params = {
-            "SavingsPlansType": params.savings_plans_type,
-            "TermInYears": params.term_in_years,
-            "PaymentOption": params.payment_option,
-            "LookbackPeriodInDays": params.lookback_period_in_days,
+            "SavingsPlansType": savings_plans_type,
+            "TermInYears": term_in_years,
+            "PaymentOption": payment_option,
+            "LookbackPeriodInDays": lookback_period_in_days,
         }
 
         # Add optional parameters
-        if params.account_scope:
-            request_params["AccountScope"] = params.account_scope
+        if account_scope:
+            request_params["AccountScope"] = account_scope
 
-        if params.filter_expression:
-            # 注意：MatchOptions的处理已移至AWS客户端层预防性处理
-            request_params["Filter"] = params.filter_expression
+        if filter_expression:
+            request_params["Filter"] = filter_expression
 
-        if params.page_size:
-            request_params["PageSize"] = params.page_size
+        if page_size:
+            request_params["PageSize"] = page_size
 
-        if params.next_page_token:
-            request_params["NextPageToken"] = params.next_page_token
+        if next_page_token:
+            request_params["NextPageToken"] = next_page_token
 
         logger.info("Making AWS API call: get_savings_plans_purchase_recommendation")
 
         # ✅ 处理分页：循环调用 API 直到获取所有数据
         all_recommendations = []
-        current_token = params.next_page_token
+        current_token = next_page_token
         page_count = 0
 
         while True:
@@ -608,11 +732,11 @@ async def get_savings_plans_purchase_recommendation(
             "total_count": len(all_recommendations),  # ✅ 添加总数
             "pages_retrieved": page_count,  # ✅ 添加页数
             "request_parameters": {
-                "savings_plans_type": params.savings_plans_type,
-                "term_in_years": params.term_in_years,
-                "payment_option": params.payment_option,
-                "lookback_period": params.lookback_period_in_days,
-                "account_scope": params.account_scope,
+                "savings_plans_type": savings_plans_type,
+                "term_in_years": term_in_years,
+                "payment_option": payment_option,
+                "lookback_period": lookback_period_in_days,
+                "account_scope": account_scope,
             },
         }
 
@@ -626,7 +750,11 @@ async def get_savings_plans_purchase_recommendation(
 
 
 async def start_savings_plans_purchase_recommendation_generation(
-    context: Context, target_account_id: Optional[str] = None
+    ctx: Context,
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Start Savings Plans (SP) purchase recommendation generation process.
 
@@ -657,8 +785,8 @@ async def start_savings_plans_purchase_recommendation_generation(
     3. Retrieve recommendations with get_savings_plans_purchase_recommendation()
 
     Args:
-        context: MCP context
-        target_account_id: Optional AWS account ID for multi-account access
+        ctx: MCP context
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing generation request results including RecommendationId and estimated completion time
@@ -669,7 +797,7 @@ async def start_savings_plans_purchase_recommendation_generation(
         - Use get_savings_plans_purchase_recommendation() to retrieve results with specific filters
     """
     operation = "start_savings_plans_purchase_recommendation_generation"
-    logger.info(f"Starting {operation}")
+    logger.info("Starting %s", operation)
 
     try:
         # 设置账号上下文（如果指定了目标账号）
@@ -693,7 +821,7 @@ async def start_savings_plans_purchase_recommendation_generation(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -745,9 +873,35 @@ async def start_savings_plans_purchase_recommendation_generation(
 
 
 async def get_savings_plans_utilization_details(
-    context: Context,
-    params: SavingsPlansUtilizationDetailsParams,
-    target_account_id: Optional[str] = None,
+    ctx: Context,
+    start_date: Annotated[str, Field(description="Start date in YYYY-MM-DD format")],
+    end_date: Annotated[str, Field(description="End date in YYYY-MM-DD format")],
+    data_type: Annotated[
+        Optional[list[str]],
+        Field(
+            description="Data types to include: ATTRIBUTES, UTILIZATION, AMORTIZED_COMMITMENT, SAVINGS"
+        ),
+    ] = None,
+    filter_expression: Annotated[
+        Optional[dict],
+        Field(description="Filter expression for Cost Explorer API"),
+    ] = None,
+    sort_by: Annotated[
+        Optional[dict],
+        Field(description="Sort configuration with Key and SortOrder"),
+    ] = None,
+    max_results: Annotated[
+        Optional[int],
+        Field(description="Maximum number of results per page"),
+    ] = None,
+    next_page_token: Annotated[
+        Optional[str],
+        Field(description="Token for pagination"),
+    ] = None,
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Get detailed Savings Plans (SP) utilization analysis with account-level breakdowns.
 
@@ -777,17 +931,21 @@ async def get_savings_plans_utilization_details(
     - Provides detailed cost and savings breakdown
 
     Args:
-        context: MCP context
-        params: Savings Plans utilization details parameters
-        target_account_id: Optional AWS account ID for multi-account access
+        ctx: MCP context
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        data_type: Data types to include
+        filter_expression: Filter expression for Cost Explorer API
+        sort_by: Sort configuration
+        max_results: Maximum number of results per page
+        next_page_token: Token for pagination
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing detailed SP utilization analysis with account-level and SP-level breakdowns
     """
     operation = "get_savings_plans_utilization_details"
-    logger.info(
-        f"Starting {operation} for period {params.time_period.start_date} to {params.time_period.end_date}"
-    )
+    logger.info(f"Starting {operation} for period {start_date} to {end_date}")
 
     try:
         # 设置账号上下文（如果指定了目标账号）
@@ -811,7 +969,7 @@ async def get_savings_plans_utilization_details(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -821,26 +979,26 @@ async def get_savings_plans_utilization_details(
         # Build request parameters
         request_params = {
             "TimePeriod": {
-                "Start": format_date_for_api(params.time_period.start_date, "MONTHLY"),
-                "End": format_date_for_api(params.time_period.end_date, "MONTHLY"),
+                "Start": format_date_for_api(start_date, "MONTHLY"),
+                "End": format_date_for_api(end_date, "MONTHLY"),
             }
         }
 
         # Add optional parameters
-        if params.data_type:
-            request_params["DataType"] = params.data_type
+        if data_type:
+            request_params["DataType"] = data_type
 
-        if params.filter_expression:
-            request_params["Filter"] = params.filter_expression
+        if filter_expression:
+            request_params["Filter"] = filter_expression
 
-        if params.sort_by:
-            request_params["SortBy"] = params.sort_by
+        if sort_by:
+            request_params["SortBy"] = sort_by
 
-        if params.max_results:
-            request_params["MaxResults"] = params.max_results
+        if max_results:
+            request_params["MaxResults"] = max_results
 
-        if params.next_page_token:
-            request_params["NextPageToken"] = params.next_page_token
+        if next_page_token:
+            request_params["NextPageToken"] = next_page_token
 
         logger.info("🔍 Making AWS API call: get_savings_plans_utilization_details")
         logger.info(
@@ -850,7 +1008,7 @@ async def get_savings_plans_utilization_details(
         # ✅ 处理分页：循环调用 API 直到获取所有数据
         all_details = []
         all_account_ids = set()
-        current_token = params.next_page_token
+        current_token = next_page_token
         page_count = 0
 
         while True:
@@ -914,11 +1072,11 @@ async def get_savings_plans_utilization_details(
             "pages_retrieved": page_count,  # ✅ 添加页数
             "request_parameters": {
                 "time_period": {
-                    "start_date": params.time_period.start_date,
-                    "end_date": params.time_period.end_date,
+                    "start_date": start_date,
+                    "end_date": end_date,
                 },
-                "data_type": params.data_type,
-                "max_results": params.max_results,
+                "data_type": data_type,
+                "max_results": max_results,
             },
         }
 
@@ -930,9 +1088,15 @@ async def get_savings_plans_utilization_details(
 
 
 async def get_savings_plan_purchase_recommendation_details(
-    context: Context,
-    recommendation_detail_id: str,
-    target_account_id: Optional[str] = None,
+    ctx: Context,
+    recommendation_detail_id: Annotated[
+        str,
+        Field(description="Unique identifier for the recommendation detail"),
+    ],
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Get detailed information for a specific Savings Plan (SP) purchase recommendation.
 
@@ -960,9 +1124,9 @@ async def get_savings_plan_purchase_recommendation_details(
     - Shows exact commitment amounts and savings projections
 
     Args:
-        context: MCP context
+        ctx: MCP context
         recommendation_detail_id: Unique identifier for the recommendation detail
-        target_account_id: Optional AWS account ID for multi-account access
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing detailed SP recommendation information with cost analysis and savings projections
@@ -992,7 +1156,7 @@ async def get_savings_plan_purchase_recommendation_details(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -1032,12 +1196,27 @@ async def get_savings_plan_purchase_recommendation_details(
 
 
 async def list_savings_plans_purchase_recommendation_generation(
-    context: Context,
-    target_account_id: Optional[str] = None,
-    generation_status: str | None = None,
-    recommendation_ids: list[str] | None = None,
-    page_size: int | None = 20,
-    next_page_token: str | None = None,
+    ctx: Context,
+    generation_status: Annotated[
+        Optional[str],
+        Field(description="Filter by generation status: SUCCEEDED, PROCESSING, or FAILED"),
+    ] = None,
+    recommendation_ids: Annotated[
+        Optional[list[str]],
+        Field(description="List of recommendation IDs to filter by"),
+    ] = None,
+    page_size: Annotated[
+        Optional[int],
+        Field(description="Number of results per page"),
+    ] = 20,
+    next_page_token: Annotated[
+        Optional[str],
+        Field(description="Token for pagination"),
+    ] = None,
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """List Savings Plans (SP) purchase recommendation generation tasks and check their status.
 
@@ -1070,12 +1249,12 @@ async def list_savings_plans_purchase_recommendation_generation(
     3. Once status is SUCCEEDED, call get_savings_plans_purchase_recommendation() with the recommendation ID
 
     Args:
-        context: MCP context
-        target_account_id: Optional AWS account ID for multi-account access
+        ctx: MCP context
         generation_status: Filter by generation status (SUCCEEDED, PROCESSING, FAILED)
         recommendation_ids: List of recommendation IDs to filter by
         page_size: Number of results per page
         next_page_token: Token for pagination
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing list of SP recommendation generation tasks with status and metadata
@@ -1105,7 +1284,7 @@ async def list_savings_plans_purchase_recommendation_generation(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -1113,7 +1292,7 @@ async def list_savings_plans_purchase_recommendation_generation(
         ce_client = get_cost_explorer_client()
 
         # Build request parameters
-        request_params = {}
+        request_params: dict[str, Any] = {}
 
         # Add optional parameters
         if generation_status:

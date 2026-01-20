@@ -26,14 +26,14 @@ RUN apk add --no-cache \
 # 创建虚拟环境
 RUN python -m venv /app/.venv
 
-# 安装 Python 依赖（单层安装，让 pip 处理依赖解析）
+# 安装 Python 依赖（锁定版本以确保一致性，与 CloudTrail MCP 对齐）
 RUN /app/.venv/bin/pip install --no-cache-dir \
-    boto3>=1.38.0 \
-    pydantic>=2.10.0 \
-    'mcp[cli]>=1.23.0' \
-    sqlalchemy>=2.0.0 \
-    psycopg2-binary>=2.9.0 \
-    cryptography>=41.0.0 \
+    boto3==1.38.22 \
+    pydantic==2.11.7 \
+    'mcp[cli]==1.23.3' \
+    sqlalchemy==2.0.36 \
+    psycopg2-binary==2.9.10 \
+    cryptography==44.0.0 \
     aws-opentelemetry-distro==0.12.2
 
 # 复制应用代码
@@ -78,9 +78,10 @@ USER app
 # 暴露端口
 EXPOSE 8000 8080 9000
 
-# 健康检查（检查 MCP 端点是否响应）
+# 健康检查（使用进程存活检查，避免 GET 请求问题，因为 /mcp 端点只支持 POST）
+# 参考 CloudTrail MCP 的健康检查方式
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/mcp', timeout=5)" || exit 1
+    CMD pgrep -f "python.*server" > /dev/null || exit 1
 
 # 启动命令（直接运行 server.py，与 cloudtrail 不同，因为我们没有包结构）
 CMD ["opentelemetry-instrument", "python", "server.py"]

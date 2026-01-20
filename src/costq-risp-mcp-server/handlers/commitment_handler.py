@@ -16,31 +16,45 @@
 
 This module provides handler functions for Commitment Purchase Analysis operations
 including starting analysis, retrieving results, and listing analysis tasks.
+
+Key design principle:
+- All tool functions use flat parameter signatures with Annotated types
+- No nested Pydantic models in function signatures (MCP Schema compatibility)
+- Compatible with AgentCore Gateway tools/list endpoint
 """
 
 import logging
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
-logger = logging.getLogger(__name__)
 from mcp.server.fastmcp import Context
+from pydantic import Field
 
-# Import credential services from server
 from cred_extract_services import (
-    setup_account_context,
     AccountNotFoundError,
     AssumeRoleError,
     CredentialDecryptionError,
     DatabaseConnectionError,
+    setup_account_context,
 )
-
 from utils.aws_client import call_aws_api_with_retry, get_cost_explorer_client
 from utils.formatters import format_error_response, format_success_response
 
+logger = logging.getLogger(__name__)
+
 
 async def start_commitment_purchase_analysis(
-    context: Context,
-    commitment_purchase_analysis_configuration: dict[str, Any],
-    target_account_id: Optional[str] = None,
+    ctx: Context,
+    commitment_purchase_analysis_configuration: Annotated[
+        dict[str, Any],
+        Field(
+            description="Analysis configuration including SavingsPlansPurchaseAnalysisConfiguration "
+            "with AccountScope, AccountId, AnalysisType, SavingsPlansToAdd, SavingsPlansToExclude, LookBackTimePeriod"
+        ),
+    ],
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Start a commitment purchase analysis.
 
@@ -48,15 +62,15 @@ async def start_commitment_purchase_analysis(
     comparing Reserved Instances and Savings Plans to identify optimal cost savings.
 
     Args:
-        context: MCP context
+        ctx: MCP context
         commitment_purchase_analysis_configuration: Analysis configuration
-        target_account_id: Optional AWS account ID for multi-account access
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing analysis initiation results
     """
     operation = "start_commitment_purchase_analysis"
-    logger.info(f"Starting {operation}")
+    logger.info("Starting %s", operation)
 
     try:
         # 设置账号上下文（如果指定了目标账号）
@@ -80,7 +94,7 @@ async def start_commitment_purchase_analysis(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -118,9 +132,15 @@ async def start_commitment_purchase_analysis(
 
 
 async def get_commitment_purchase_analysis(
-    context: Context,
-    analysis_id: str,
-    target_account_id: Optional[str] = None,
+    ctx: Context,
+    analysis_id: Annotated[
+        str,
+        Field(description="Unique identifier for the analysis"),
+    ],
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """Get commitment purchase analysis results.
 
@@ -128,9 +148,9 @@ async def get_commitment_purchase_analysis(
     recommendations and savings projections.
 
     Args:
-        context: MCP context
+        ctx: MCP context
         analysis_id: Unique identifier for the analysis
-        target_account_id: Optional AWS account ID for multi-account access
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing analysis results
@@ -160,7 +180,7 @@ async def get_commitment_purchase_analysis(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -207,12 +227,27 @@ async def get_commitment_purchase_analysis(
 
 
 async def list_commitment_purchase_analyses(
-    context: Context,
-    target_account_id: Optional[str] = None,
-    analysis_status: str | None = None,
-    analysis_ids: list[str] | None = None,
-    page_size: int | None = 20,
-    next_page_token: str | None = None,
+    ctx: Context,
+    analysis_status: Annotated[
+        Optional[str],
+        Field(description="Filter by analysis status: SUCCEEDED, PROCESSING, or FAILED"),
+    ] = None,
+    analysis_ids: Annotated[
+        Optional[list[str]],
+        Field(description="List of analysis IDs to filter by"),
+    ] = None,
+    page_size: Annotated[
+        Optional[int],
+        Field(description="Number of results per page"),
+    ] = 20,
+    next_page_token: Annotated[
+        Optional[str],
+        Field(description="Token for pagination"),
+    ] = None,
+    target_account_id: Annotated[
+        Optional[str],
+        Field(description="Target AWS account ID for multi-account access"),
+    ] = None,
 ) -> dict[str, Any]:
     """List commitment purchase analyses.
 
@@ -220,12 +255,12 @@ async def list_commitment_purchase_analyses(
     by status and analysis IDs.
 
     Args:
-        context: MCP context
-        target_account_id: Optional AWS account ID for multi-account access
+        ctx: MCP context
         analysis_status: Filter by analysis status (SUCCEEDED, PROCESSING, FAILED)
         analysis_ids: List of analysis IDs to filter by
         page_size: Number of results per page
         next_page_token: Token for pagination
+        target_account_id: Target AWS account ID for multi-account access
 
     Returns:
         Dict containing list of analyses
@@ -255,7 +290,7 @@ async def list_commitment_purchase_analyses(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
             except DatabaseConnectionError as e:
-                logger.error(f"数据库连接失败")
+                logger.error("数据库连接失败")
                 return format_error_response(
                     error=e, operation=operation, error_type="database_connection_error"
                 )
@@ -263,7 +298,7 @@ async def list_commitment_purchase_analyses(
         ce_client = get_cost_explorer_client()
 
         # Build request parameters
-        request_params = {}
+        request_params: dict[str, Any] = {}
 
         # Add optional parameters
         if analysis_status:
