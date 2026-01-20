@@ -55,7 +55,8 @@ mcp = FastMCP(
         'pydantic',
     ],
     host="0.0.0.0",
-    stateless_http=True
+    stateless_http=True,
+    port=8000
 )
 
 # Initialize and register CloudTrail tools
