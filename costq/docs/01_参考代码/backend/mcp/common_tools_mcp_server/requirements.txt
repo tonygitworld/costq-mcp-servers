@@ -1,0 +1,5 @@
+# Common Tools MCP Server Dependencies
+# 通用工具 MCP 服务器依赖
+
+# Core MCP dependencies
+mcp>=1.1.0

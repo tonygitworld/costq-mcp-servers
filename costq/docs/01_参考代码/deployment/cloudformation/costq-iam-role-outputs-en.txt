@@ -1,0 +1,86 @@
+# English Outputs for CloudFormation Template
+
+RoleName:
+  Description: "IAM Role name"
+
+ExternalId:
+  Description: "External ID (configured for security verification)"
+
+TrustedPrincipal:
+  Description: "Trusted AWS account (CostQ Platform)"
+
+SessionDuration:
+  Description: "Temporary credential validity period"
+  Value: "${SessionDuration} seconds (${SessionDuration} / 3600 hours)"
+
+AttachedPolicies:
+  Description: "Attached policies"
+  Value: "ReadOnlyAccess (AWS Managed) + refresh-sp-recommendations (Custom)"
+
+QuickLaunchURL:
+  Description: "One-click deployment link (shareable with other accounts). WARNING: Ensure External ID is replaced with recipient's organization-specific ID before sharing"
+
+NextSteps:
+  Description: "Next steps"
+  Value: |
+    1. Copy the RoleArn above
+    2. Return to CostQ platform
+    3. Select "IAM Role" method in "Add AWS Account" dialog
+    4. Paste Role ARN and complete configuration
+    5. Start using cost analysis and recommendation features
+
+SecurityNote:
+  Description: "Security information"
+  Value: |
+    ✅ This Role uses temporary credentials (auto-expires, default 1 hour)
+    ✅ External ID prevents unauthorized access
+    ✅ Read-only permissions + SP recommendation generation only (no auto-purchase)
+    ✅ Complies with AWS security best practices
+
+    To revoke access, simply delete this CloudFormation Stack.
+
+SupportedFeatures:
+  Description: "Supported features"
+  Value: |
+    ✅ Cost analysis (Cost Explorer, Cost Optimization Hub)
+    ✅ Resource inventory (EC2, RDS, S3, all services)
+    ✅ Audit queries (CloudTrail events and Lake analysis)
+    ✅ RI/SP utilization and coverage analysis
+    ✅ Savings Plans recommendation generation
+    ✅ Cost optimization recommendations (Compute Optimizer)
+    ✅ Right-sizing recommendations
+
+    ❌ Unsupported operations:
+    - Create/delete/modify any resources (completely read-only)
+    - Auto-purchase RI/SP (requires manual confirmation)
+
+CostEstimate:
+  Description: "Cost estimate"
+  Value: |
+    Using this Role incurs no additional charges.
+
+    CostQ platform API calls are included in AWS Free Tier:
+    - STS AssumeRole: Free
+    - Cost Explorer API: First 2,000 calls/month free
+    - CloudTrail LookupEvents: First 100,000 calls/month free
+
+    Beyond free tier, costs are minimal (typically < $1/month).
+
+TroubleshootingGuide:
+  Description: "Troubleshooting guide"
+  Value: |
+    Common issues:
+
+    1. "AssumeRole failed: Access Denied"
+       → Check if External ID matches
+       → Verify CostQ platform account ID is correct
+
+    2. "Permission denied"
+       → Confirm ReadOnlyAccess policy is attached
+       → Check AWS service quotas
+
+    3. "Session expired"
+       → CostQ platform auto-renews, no action needed
+       → If frequently expiring, increase SessionDuration parameter
+
+    Need help? Visit CostQ documentation or contact support team.

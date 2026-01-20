@@ -1,0 +1,9 @@
+# Send Email MCP Server Dependencies
+
+# Core dependencies
+boto3>=1.28.0
+loguru>=0.7.0
+fastmcp>=0.2.0
+
+# Type hints
+typing-extensions>=4.0.0
