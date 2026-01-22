@@ -17,11 +17,11 @@
 This module contains all the constants used for Reserved Instance and Savings Plans operations.
 """
 
-# Savings Plans 类型
+# Savings Plans 类型 (AWS API 标准值)
 VALID_SAVINGS_PLANS_TYPES: list[str] = [
-    "COMPUTE_SP",  # 计算型 Savings Plans
-    "EC2_INSTANCE_SP",  # EC2 实例 Savings Plans
-    "SAGEMAKER_SP",  # SageMaker Savings Plans
+    "Compute",  # 计算型 Savings Plans
+    "EC2 Instance",  # EC2 实例 Savings Plans
+    "SageMaker",  # SageMaker Savings Plans
 ]
 
 # 期限选项

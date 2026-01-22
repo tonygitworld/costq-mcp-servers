@@ -37,7 +37,7 @@ from cred_extract_services import (
     DatabaseConnectionError,
     setup_account_context,
 )
-from utils.aws_client import call_aws_api_with_retry, get_cost_explorer_client
+from utils.aws_client import call_aws_api_with_retry, get_cost_explorer_client, reset_cost_explorer_client
 from utils.formatters import (
     format_date_for_api,
     format_error_response,
@@ -116,7 +116,7 @@ async def get_savings_plans_utilization(
             description=(
                 "Filter expression for Cost Explorer API as a JSON string or dict object. "
                 "Supported dimensions: LINKED_ACCOUNT, SAVINGS_PLAN_ARN, SAVINGS_PLANS_TYPE, REGION, PAYMENT_OPTION, INSTANCE_TYPE_FAMILY. "
-                "Example: '{\"Dimensions\": {\"Key\": \"SAVINGS_PLANS_TYPE\", \"Values\": [\"COMPUTE_SP\"]}}'"
+                "Example: '{\"Dimensions\": {\"Key\": \"SAVINGS_PLANS_TYPE\", \"Values\": [\"Compute\"]}}'"
             )
         ),
     ] = None,
@@ -180,9 +180,9 @@ async def get_savings_plans_utilization(
     - INSTANCE_TYPE_FAMILY - Filter by instance family (e.g., "m5", "c5")
 
     **Valid SAVINGS_PLANS_TYPE values:**
-    - "COMPUTE_SP" - Covers EC2, Lambda, Fargate (most flexible, up to 66% savings)
-    - "EC2_INSTANCE_SP" - Covers specific EC2 instance family (up to 72% savings)
-    - "SAGEMAKER_SP" - Covers SageMaker usage (up to 64% savings)
+    - "Compute" - Covers EC2, Lambda, Fargate (most flexible, up to 66% savings)
+    - "EC2 Instance" - Covers specific EC2 instance family (up to 72% savings)
+    - "SageMaker" - Covers SageMaker usage (up to 64% savings)
     - "DATABASE_SP" - Covers RDS, DynamoDB, ElastiCache, etc. (up to 35% savings, newer option)
 
     **NOT SUPPORTED:**
@@ -590,7 +590,7 @@ async def get_savings_plans_purchase_recommendation(
     savings_plans_type: Annotated[
         str,
         Field(
-            description="Type of Savings Plans: COMPUTE_SP, EC2_INSTANCE_SP, SAGEMAKER_SP, or DATABASE_SP"
+            description="Type of Savings Plans: Compute, EC2 Instance, SageMaker"
         ),
     ],
     term_in_years: Annotated[
@@ -664,7 +664,7 @@ async def get_savings_plans_purchase_recommendation(
 
     Args:
         ctx: MCP context
-        savings_plans_type: Type of Savings Plans (COMPUTE_SP, EC2_INSTANCE_SP, SAGEMAKER_SP, DATABASE_SP)
+        savings_plans_type: Type of Savings Plans (Compute, EC2 Instance, SageMaker)
         term_in_years: Term in years (ONE_YEAR or THREE_YEARS)
         payment_option: Payment option (NO_UPFRONT, PARTIAL_UPFRONT, ALL_UPFRONT)
         lookback_period_in_days: Lookback period (SEVEN_DAYS, THIRTY_DAYS, SIXTY_DAYS)

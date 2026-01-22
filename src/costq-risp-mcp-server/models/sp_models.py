@@ -75,7 +75,7 @@ class SavingsPlansPurchaseRecommendationRequest(BaseModel):
     """Request model for SP purchase recommendations."""
 
     savings_plans_type: str = Field(
-        description="Savings Plans type (COMPUTE_SP, EC2_INSTANCE_SP, SAGEMAKER_SP)"
+        description="Savings Plans type (Compute, EC2 Instance, SageMaker)"
     )
     term_in_years: str = Field(description="Term length (ONE_YEAR, THREE_YEARS)")
     payment_option: str = Field(
@@ -477,7 +477,7 @@ class SavingsPlansPurchaseRecommendationParams(BaseModel):
     """Simplified parameters for Savings Plans purchase recommendation query."""
 
     savings_plans_type: str = Field(
-        description="Type of Savings Plans (COMPUTE_SP, EC2_INSTANCE_SP, SAGEMAKER_SP)"
+        description="Type of Savings Plans (Compute, EC2 Instance, SageMaker)"
     )
     term_in_years: str = Field(description="Commitment term in years (ONE_YEAR or THREE_YEARS)")
     payment_option: str = Field(
