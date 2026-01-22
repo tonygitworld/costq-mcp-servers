@@ -27,23 +27,32 @@ from ..utilities.aws_service_base import (
 )
 from ..utilities.logging_utils import get_context_logger
 from ..utilities.sql_utils import convert_api_response_to_table
+from ..utilities.type_parsers import parse_int_param
 from fastmcp import Context
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 
-async def get_service_codes(ctx: Context, max_results: Optional[int] = None) -> Dict[str, Any]:
+async def get_service_codes(ctx: Context, max_results: Optional[Union[str, int]] = None) -> Dict[str, Any]:
     """Retrieve all available service codes from AWS Price List API.
 
     Uses shared utilities for client creation and response formatting.
 
     Args:
         ctx: MCP context
-        max_results: Maximum number of results to return
+        max_results: Maximum number of results to return. Accepts string or integer.
 
     Returns:
         Dict containing service codes
     """
     try:
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "get_service_codes",
+            "max_results",
+            min_value=1
+        )
+
         await ctx.info('Retrieving AWS service codes from Price List API')
 
         # Create pricing client using shared utility
@@ -62,8 +71,8 @@ async def get_service_codes(ctx: Context, max_results: Optional[int] = None) -> 
             params: Dict[str, Any] = {}
             if next_token:
                 params['NextToken'] = next_token
-            if max_results:
-                params['MaxResults'] = int(max_results)
+            if parsed_max_results:
+                params['MaxResults'] = parsed_max_results
 
             # Make API call
             await ctx.info(f'Fetching service codes page {page_count}')
@@ -154,7 +163,7 @@ async def get_service_attributes(ctx: Context, service_code: str) -> Dict[str, A
 
 
 async def get_attribute_values(
-    ctx: Context, service_code: str, attribute_name: str, max_results: Optional[int] = None
+    ctx: Context, service_code: str, attribute_name: str, max_results: Optional[Union[str, int]] = None
 ) -> Dict[str, Any]:
     """Retrieve all possible values for a specific attribute of an AWS service.
 
@@ -162,12 +171,20 @@ async def get_attribute_values(
         ctx: MCP context
         service_code: AWS service code
         attribute_name: Service attribute name
-        max_results: Maximum number of results to return
+        max_results: Maximum number of results to return. Accepts string or integer.
 
     Returns:
         Dict containing attribute values
     """
     try:
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "get_attribute_values",
+            "max_results",
+            min_value=1
+        )
+
         await ctx.info(
             f"Retrieving values for attribute '{attribute_name}' of service '{service_code}'"
         )
@@ -188,8 +205,8 @@ async def get_attribute_values(
             params: Dict[str, Any] = {'ServiceCode': service_code, 'AttributeName': attribute_name}
             if next_token:
                 params['NextToken'] = next_token
-            if max_results is not None:
-                params['MaxResults'] = max_results
+            if parsed_max_results is not None:
+                params['MaxResults'] = parsed_max_results
 
             # Make API call
             await ctx.info(f'Fetching attribute values page {page_count}')
@@ -243,7 +260,7 @@ async def get_pricing_from_api(
     service_code: str,
     region: str,
     filters: Optional[str] = None,
-    max_results: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
 ) -> Dict[str, Any]:
     """Get pricing information from AWS Price List API.
 
@@ -252,12 +269,20 @@ async def get_pricing_from_api(
         service_code: AWS service code
         region: AWS region
         filters: Optional filters as JSON string
-        max_results: Maximum number of results to return
+        max_results: Maximum number of results to return. Accepts string or integer.
 
     Returns:
         Dict containing pricing data
     """
     try:
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "get_pricing_from_api",
+            "max_results",
+            min_value=1
+        )
+
         await ctx.info(
             f"Retrieving pricing data for service '{service_code}' in region '{region}'"
         )
@@ -294,8 +319,8 @@ async def get_pricing_from_api(
 
             # Prepare request parameters
             params: Dict[str, Any] = {'ServiceCode': service_code, 'Filters': api_filters}
-            if max_results:
-                params['MaxResults'] = int(max_results)
+            if parsed_max_results:
+                params['MaxResults'] = parsed_max_results
             if next_token:
                 params['NextToken'] = next_token
 

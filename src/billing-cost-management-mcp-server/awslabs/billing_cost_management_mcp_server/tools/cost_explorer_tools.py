@@ -18,6 +18,7 @@ Updated to use shared utility functions.
 """
 
 from ..utilities.aws_service_base import create_aws_client, format_response, handle_aws_error
+from ..utilities.type_parsers import parse_int_param
 from .cost_explorer_operations import (
     get_cost_and_usage,
     get_cost_and_usage_with_resources,
@@ -30,7 +31,7 @@ from .cost_explorer_operations import (
 )
 from botocore.exceptions import ClientError
 from fastmcp import Context, FastMCP
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 # Import account context exceptions
 from entrypoint import (
@@ -150,9 +151,9 @@ async def cost_explorer(
     filter: Optional[str] = None,
     dimension: Optional[str] = None,
     search_string: Optional[str] = None,
-    max_results: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
     next_token: Optional[str] = None,
-    max_pages: Optional[int] = None,
+    max_pages: Optional[Union[str, int]] = None,
     metric: Optional[str] = None,
     prediction_interval_level: int = 80,
     tag_key: Optional[str] = None,
@@ -175,9 +176,9 @@ async def cost_explorer(
         filter: Filter to apply to the results
         dimension: Dimension to get values for (getDimensionValues)
         search_string: Search string to filter dimension values
-        max_results: Maximum number of results to return
+        max_results: Maximum number of results to return. Accepts string or integer.
         next_token: Pagination token
-        max_pages: Maximum number of pages to retrieve
+        max_pages: Maximum number of pages to retrieve. Accepts string or integer.
         metric: Metric for cost forecasts
         prediction_interval_level: Confidence level for forecasts
         tag_key: Tag key to get values for
@@ -192,11 +193,31 @@ async def cost_explorer(
             from entrypoint import _setup_account_context
             await _setup_account_context(target_account_id)
 
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "cost_explorer",
+            "max_results",
+            min_value=1
+        )
+        parsed_max_pages = parse_int_param(
+            max_pages,
+            "cost_explorer",
+            "max_pages",
+            min_value=1
+        )
+
         # ===== Original logic (unchanged) =====
         await ctx.info(f'Cost Explorer operation: {operation}')
 
         # Create Cost Explorer client
         ce_client = create_aws_client('ce')
+    except ValueError as e:
+        return format_response(
+            'error',
+            {'error_type': 'validation_error', 'details': str(e)},
+            f'Invalid parameter: {str(e)}'
+        )
     except Exception as client_error:
         await ctx.error(f'Failed to create AWS client: {str(client_error)}')
         return format_response(
@@ -223,7 +244,7 @@ async def cost_explorer(
                 group_by,
                 filter,
                 next_token,
-                max_pages,
+                parsed_max_pages,
             )
 
         elif operation == 'getCostAndUsageWithResources':
@@ -245,9 +266,9 @@ async def cost_explorer(
                 end_date,
                 search_string,
                 filter,
-                max_results,
+                parsed_max_results,
                 next_token,
-                max_pages,
+                parsed_max_pages,
             )
 
         elif operation == 'getCostForecast':
@@ -293,7 +314,7 @@ async def cost_explorer(
                 search_string,
                 tag_key,
                 next_token,
-                max_pages,
+                parsed_max_pages,
             )
 
         elif operation == 'getCostCategories' or operation == 'getCostCategoryValues':
@@ -305,12 +326,12 @@ async def cost_explorer(
                 search_string,
                 cost_category_name if operation == 'getCostCategoryValues' else None,
                 next_token,
-                max_pages,
+                parsed_max_pages,
             )
 
         elif operation == 'getSavingsPlansUtilization':
             return await get_savings_plans_utilization(
-                ctx, ce_client, start_date, end_date, granularity, filter, next_token, max_pages
+                ctx, ce_client, start_date, end_date, granularity, filter, next_token, parsed_max_pages
             )
 
         else:

@@ -23,8 +23,9 @@ from ..utilities.aws_service_base import (
     handle_aws_error,
     parse_json,
 )
+from ..utilities.type_parsers import parse_int_param
 from fastmcp import Context, FastMCP
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 # Import account context exceptions
 from entrypoint import (
@@ -59,7 +60,7 @@ async def free_tier_usage(
     target_account_id: Optional[str] = None,
     operation: str = 'get_free_tier_usage',
     filter: Optional[str] = None,
-    max_results: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
 ) -> Dict[str, Any]:
     """Retrieves AWS Free Tier usage information using the Free Tier Usage API.
 
@@ -68,12 +69,21 @@ async def free_tier_usage(
         target_account_id: Target AWS account ID. If not provided, use default credentials.
         operation: The operation to perform: 'get_free_tier_usage'
         filter: Optional filter to apply to the results as a JSON string.
-        max_results: Maximum number of results to return per page (1-1000). Defaults to 100.
+        max_results: Maximum number of results to return per page (1-1000). Accepts string or integer. Defaults to 100.
 
     Returns:
         Dict containing the free tier usage information
     """
     try:
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "free_tier_usage",
+            "max_results",
+            min_value=1,
+            max_value=1000
+        )
+
         # ===== Account context initialization =====
         if target_account_id:
             from entrypoint import _setup_account_context
@@ -86,13 +96,19 @@ async def free_tier_usage(
         freetier_client = create_aws_client('freetier', region_name='us-east-1')
 
         if operation == 'get_free_tier_usage':
-            return await get_free_tier_usage_data(ctx, freetier_client, filter, max_results)
+            return await get_free_tier_usage_data(ctx, freetier_client, filter, parsed_max_results)
         else:
             return format_response(
                 'error', {}, f"Unsupported operation: {operation}. Use 'get_free_tier_usage'."
             )
 
     # ===== Exception handling =====
+    except ValueError as e:
+        return format_response(
+            'error',
+            {'error_type': 'validation_error', 'details': str(e)},
+            f'Invalid parameter: {str(e)}'
+        )
     except AccountNotFoundError:
         return format_response('error', {'error_type': 'account_not_found'},
                                'Account not found. Please check the account ID.')

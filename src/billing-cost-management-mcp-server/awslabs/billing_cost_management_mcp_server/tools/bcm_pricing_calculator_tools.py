@@ -24,9 +24,10 @@ from ..utilities.aws_service_base import (
     handle_aws_error,
     paginate_aws_response,
 )
+from ..utilities.type_parsers import parse_int_param
 from datetime import datetime
 from fastmcp import Context, FastMCP
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 # Import account context exceptions
 from entrypoint import (
@@ -67,8 +68,8 @@ async def bcm_pricing_calc_core(
     location_filter: Optional[str] = None,
     usage_group_filter: Optional[str] = None,
     next_token: Optional[str] = None,
-    max_results: Optional[int] = None,
-    max_pages: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
+    max_pages: Optional[Union[str, int]] = None,
 ) -> Dict[str, Any]:
     """Core business logic for BCM Pricing Calculator.
 
@@ -233,8 +234,8 @@ async def bcm_pricing_calc(
     location_filter: Optional[str] = None,
     usage_group_filter: Optional[str] = None,
     next_token: Optional[str] = None,
-    max_results: Optional[int] = None,
-    max_pages: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
+    max_pages: Optional[Union[str, int]] = None,
 ) -> Dict[str, Any]:
     """FastMCP tool wrapper for BCM Pricing Calculator operations.
 
@@ -257,8 +258,8 @@ async def bcm_pricing_calc(
         location_filter: Filter by location
         usage_group_filter: Filter by usage group
         next_token: Pagination token
-        max_results: Maximum results per page
-        max_pages: Maximum number of pages
+        max_results: Maximum results per page. Accepts string or integer.
+        max_pages: Maximum number of pages. Accepts string or integer.
 
     **Parameter Notes**:
     - target_account_id: Specifies which account's credentials to use (credential initialization)
@@ -374,8 +375,8 @@ async def list_workload_estimates(
     name_filter: Optional[str] = None,
     name_match_option: str = 'CONTAINS',
     next_token: Optional[str] = None,
-    max_results: Optional[int] = None,
-    max_pages: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
+    max_pages: Optional[Union[str, int]] = None,
 ) -> Dict[str, Any]:
     """Lists all workload estimates for the account.
 
@@ -389,8 +390,8 @@ async def list_workload_estimates(
         name_filter: Filter by name (supports partial matching)
         name_match_option: Match option for name filter (EQUALS, STARTS_WITH, CONTAINS)
         next_token: Token for pagination
-        max_results: Maximum number of results to return
-        max_pages: Maximum number of API calls to make
+        max_results: Maximum number of results to return. Accepts string or integer.
+        max_pages: Maximum number of API calls to make. Accepts string or integer.
 
     Returns:
         Dict containing the workload estimates information. This contains the following information about a workload estimate:
@@ -399,9 +400,23 @@ async def list_workload_estimates(
         status: The current status of the workload estimate. Possible values are UPDATIN, VALID, INVALID, ACTION_NEEDED
     """
     try:
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "list_workload_estimates",
+            "max_results",
+            min_value=1
+        )
+        parsed_max_pages = parse_int_param(
+            max_pages,
+            "list_workload_estimates",
+            "max_pages",
+            min_value=1
+        )
+
         # Log the request
         await ctx.info(
-            f'Listing workload estimates (max_results={max_results}, '
+            f'Listing workload estimates (max_results={parsed_max_results}, '
             f'status_filter={status_filter}, name_filter={name_filter})'
         )
 
@@ -421,8 +436,8 @@ async def list_workload_estimates(
 
         request_params: Dict[str, Any] = {}
         # Build request parameters
-        if max_results:
-            request_params['maxResults'] = max_results
+        if parsed_max_results:
+            request_params['maxResults'] = parsed_max_results
 
         if next_token:
             request_params['nextToken'] = next_token
@@ -630,8 +645,8 @@ async def list_workload_estimate_usage(
     location_filter: Optional[str] = None,
     usage_group_filter: Optional[str] = None,
     next_token: Optional[str] = None,
-    max_results: Optional[int] = None,
-    max_pages: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
+    max_pages: Optional[Union[str, int]] = None,
 ) -> Dict[str, Any]:
     """Core business logic for listing usage entries for a specific workload estimate.
 
@@ -645,13 +660,27 @@ async def list_workload_estimate_usage(
         location_filter: Filter by location/region
         usage_group_filter: Filter by usage group
         next_token: Token for pagination
-        max_results: Maximum number of results to return
-        max_pages: Maximum number of API calls to make
+        max_results: Maximum number of results to return. Accepts string or integer.
+        max_pages: Maximum number of API calls to make. Accepts string or integer.
 
     Returns:
         Dict containing the workload estimate usage information
     """
     try:
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "list_workload_estimate_usage",
+            "max_results",
+            min_value=1
+        )
+        parsed_max_pages = parse_int_param(
+            max_pages,
+            "list_workload_estimate_usage",
+            "max_pages",
+            min_value=1
+        )
+
         # The reason to have the following "unnecessary" check is because how each MCP tool is registered.
         # Each MCP tool is registered with a unique name, irrespective of operations it can perform.
         # Thereby there is a single entry point that accepts params required across all operations and routes the call flow to an operation.
@@ -672,7 +701,7 @@ async def list_workload_estimate_usage(
         # Log the request
         await ctx.info(
             f'Listing workload estimate usage (workload_estimate_id={workload_estimate_id}, '
-            f'max_results={max_results}, service_code_filter={service_code_filter})'
+            f'max_results={parsed_max_results}, service_code_filter={service_code_filter})'
         )
 
         # Create BCM Pricing Calculator client
@@ -693,8 +722,8 @@ async def list_workload_estimate_usage(
         # Build request parameters
         request_params['workloadEstimateId'] = workload_estimate_id
 
-        if max_results:
-            request_params['maxResults'] = max_results
+        if parsed_max_results:
+            request_params['maxResults'] = parsed_max_results
 
         if next_token:
             request_params['nextToken'] = next_token

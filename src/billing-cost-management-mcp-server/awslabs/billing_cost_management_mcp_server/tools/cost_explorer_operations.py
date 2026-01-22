@@ -26,9 +26,10 @@ from ..utilities.aws_service_base import (
     parse_json,
 )
 from ..utilities.sql_utils import convert_api_response_to_table
+from ..utilities.type_parsers import parse_int_param
 from datetime import datetime, timedelta
 from fastmcp import Context
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 
 async def get_cost_and_usage(
@@ -222,9 +223,9 @@ async def get_dimension_values(
     end_date: Optional[str] = None,
     search_string: Optional[str] = None,
     filter_expr: Optional[str] = None,
-    max_results: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
     next_token: Optional[str] = None,
-    max_pages: Optional[int] = None,
+    max_pages: Optional[Union[str, int]] = None,
 ) -> Dict[str, Any]:
     """Get available dimension values.
 
@@ -236,13 +237,27 @@ async def get_dimension_values(
         end_date: End date in YYYY-MM-DD format (exclusive)
         search_string: Optional string to filter results
         filter_expr: Optional filters as JSON string
-        max_results: Maximum number of results per page
+        max_results: Maximum number of results per page. Accepts string or integer.
         next_token: Pagination token
-        max_pages: Maximum number of pages to fetch
+        max_pages: Maximum number of pages to fetch. Accepts string or integer.
 
     Returns:
         Dimension values response
     """
+    # ===== Parameter parsing =====
+    parsed_max_results = parse_int_param(
+        max_results,
+        "get_dimension_values",
+        "max_results",
+        min_value=1
+    )
+    parsed_max_pages = parse_int_param(
+        max_pages,
+        "get_dimension_values",
+        "max_pages",
+        min_value=1
+    )
+
     await ctx.info(f'Getting dimension values for: {dimension}')
 
     try:
@@ -263,11 +278,11 @@ async def get_dimension_values(
         if filters:
             request_params['Filter'] = filters
 
-        if max_results:
-            request_params['MaxResults'] = max_results
+        if parsed_max_results:
+            request_params['MaxResults'] = parsed_max_results
 
         # Handle pagination
-        if next_token or max_pages:
+        if next_token or parsed_max_pages:
             # For paginated requests, use the paginate utility
             results, pagination_metadata = await paginate_aws_response(
                 ctx,
@@ -277,7 +292,7 @@ async def get_dimension_values(
                 'DimensionValues',
                 'NextPageToken',
                 'NextPageToken',
-                max_pages,
+                parsed_max_pages,
             )
 
             # Format paginated response

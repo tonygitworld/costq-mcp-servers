@@ -24,9 +24,10 @@ from ..utilities.aws_service_base import (
     parse_json,
 )
 from ..utilities.logging_utils import get_context_logger
+from ..utilities.type_parsers import parse_int_param
 from botocore.exceptions import ClientError
 from fastmcp import Context, FastMCP
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 # Import account context exceptions
 from entrypoint import (
@@ -76,7 +77,7 @@ async def compute_optimizer(
     ctx: Context,
     target_account_id: Optional[str] = None,
     operation: str = None,
-    max_results: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
     filters: Optional[str] = None,
     account_ids: Optional[str] = None,
     next_token: Optional[str] = None,
@@ -87,7 +88,7 @@ async def compute_optimizer(
         ctx: The MCP context
         target_account_id: Target AWS account ID for credential initialization. If not provided, use default credentials.
         operation: The operation to perform (e.g., 'get_ec2_instance_recommendations')
-        max_results: Maximum number of results to return (1-100)
+        max_results: Maximum number of results to return (1-100). Accepts string or integer.
         filters: Optional filter expression as JSON string
         account_ids: Optional list of AWS account IDs as JSON array string to query recommendations for
         next_token: Optional pagination token from a previous response
@@ -108,6 +109,15 @@ async def compute_optimizer(
         if target_account_id:
             from entrypoint import _setup_account_context
             await _setup_account_context(target_account_id)
+
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "compute_optimizer",
+            "max_results",
+            min_value=1,
+            max_value=100
+        )
 
         # ===== Original logic (unchanged) =====
         # Log the request
@@ -165,27 +175,27 @@ async def compute_optimizer(
         # Process the operation
         if operation == 'get_ec2_instance_recommendations':
             return await get_ec2_instance_recommendations(
-                ctx, co_client, max_results, filters, account_ids, next_token
+                ctx, co_client, parsed_max_results, filters, account_ids, next_token
             )
         elif operation == 'get_auto_scaling_group_recommendations':
             return await get_auto_scaling_group_recommendations(
-                ctx, co_client, max_results, filters, account_ids, next_token
+                ctx, co_client, parsed_max_results, filters, account_ids, next_token
             )
         elif operation == 'get_ebs_volume_recommendations':
             return await get_ebs_volume_recommendations(
-                ctx, co_client, max_results, filters, account_ids, next_token
+                ctx, co_client, parsed_max_results, filters, account_ids, next_token
             )
         elif operation == 'get_lambda_function_recommendations':
             return await get_lambda_function_recommendations(
-                ctx, co_client, max_results, filters, account_ids, next_token
+                ctx, co_client, parsed_max_results, filters, account_ids, next_token
             )
         elif operation == 'get_rds_recommendations':
             return await get_rds_recommendations(
-                ctx, co_client, max_results, filters, account_ids, next_token
+                ctx, co_client, parsed_max_results, filters, account_ids, next_token
             )
         elif operation == 'get_ecs_service_recommendations':
             return await get_ecs_service_recommendations(
-                ctx, co_client, max_results, filters, account_ids, next_token
+                ctx, co_client, parsed_max_results, filters, account_ids, next_token
             )
         else:
             return format_response(

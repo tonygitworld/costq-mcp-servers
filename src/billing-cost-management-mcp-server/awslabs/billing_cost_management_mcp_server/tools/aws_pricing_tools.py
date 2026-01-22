@@ -18,6 +18,7 @@ Updated to use shared utility functions.
 """
 
 from ..utilities.aws_service_base import format_response, handle_aws_error
+from ..utilities.type_parsers import parse_int_param
 
 # Import operation handlers from local module
 from .aws_pricing_operations import (
@@ -27,7 +28,7 @@ from .aws_pricing_operations import (
     get_service_codes,
 )
 from fastmcp import Context, FastMCP
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 # Import account context exceptions
 from entrypoint import (
@@ -91,7 +92,7 @@ async def aws_pricing(
     attribute_name: Optional[str] = None,
     region: Optional[str] = None,
     filters: Optional[str] = None,
-    max_results: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
 ) -> Dict[str, Any]:
     """AWS pricing analysis tool.
 
@@ -103,19 +104,25 @@ async def aws_pricing(
         attribute_name: Attribute name (e.g., 'instanceType', 'location', 'storageClass'). Required for get_attribute_values operation.
         region: AWS region (e.g., 'us-east-1', 'us-west-2', 'eu-west-1'). Required for get_pricing_from_api operation.
         filters: Optional filters for pricing queries as a JSON string. Format: '{"instanceType": "t3.medium", "location": "US East (N. Virginia)"}'
-        max_results: Maximum number of results to return (optional)
+        max_results: Maximum number of results to return. Accepts string or integer.
 
     Returns:
         Dict containing the pricing information
     """
     try:
-        # ===== Account context initialization =====
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "aws_pricing",
+            "max_results",
+            min_value=1
+        )
 
         # ===== Original logic (unchanged) =====
         await ctx.info(f'AWS Pricing operation: {operation}')
 
         if operation == 'get_service_codes':
-            return await get_service_codes(ctx, max_results=max_results)
+            return await get_service_codes(ctx, max_results=parsed_max_results)
 
         elif operation == 'get_service_attributes':
             if not service_code:
@@ -134,7 +141,7 @@ async def aws_pricing(
                     },
                 )
             return await get_attribute_values(
-                ctx, service_code, attribute_name, max_results=max_results
+                ctx, service_code, attribute_name, max_results=parsed_max_results
             )
 
         elif operation == 'get_pricing_from_api':
@@ -146,7 +153,7 @@ async def aws_pricing(
                     },
                 )
             return await get_pricing_from_api(
-                ctx, service_code, region, filters, max_results=max_results
+                ctx, service_code, region, filters, max_results=parsed_max_results
             )
 
         else:
@@ -158,6 +165,12 @@ async def aws_pricing(
             )
 
     # ===== Exception handling =====
+    except ValueError as e:
+        return format_response(
+            'error',
+            {'error_type': 'validation_error', 'details': str(e)},
+            f'Invalid parameter: {str(e)}'
+        )
     except AccountNotFoundError:
         return format_response('error', {'error_type': 'account_not_found'},
                                'Account not found. Please check the account ID.')

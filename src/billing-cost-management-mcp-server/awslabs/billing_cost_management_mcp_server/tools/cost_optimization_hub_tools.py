@@ -29,13 +29,14 @@ from ..utilities.constants import (
     OPERATION_LIST_RECOMMENDATION_SUMMARIES,
     OPERATION_LIST_RECOMMENDATIONS,
 )
+from ..utilities.type_parsers import parse_int_param
 from .cost_optimization_hub_helpers import (
     get_recommendation,
     list_recommendation_summaries,
     list_recommendations,
 )
 from fastmcp import Context, FastMCP
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 # Import account context exceptions
 from entrypoint import (
@@ -113,7 +114,7 @@ async def cost_optimization_hub(
     operation: str = None,
     resource_id: Optional[str] = None,
     resource_type: Optional[str] = None,
-    max_results: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
     filters: Optional[str] = None,
     group_by: Optional[str] = None,
     include_all_recommendations: Optional[bool] = None,
@@ -126,7 +127,7 @@ async def cost_optimization_hub(
         operation: The operation to perform ('list_recommendations', 'get_recommendation', or 'list_recommendation_summaries')
         resource_id: Resource ID for get_recommendation operation
         resource_type: Resource type for get_recommendation operation
-        max_results: Maximum total results to return across all pages; None means all available results
+        max_results: Maximum total results to return across all pages. Accepts string or integer. None means all available results.
         filters: Optional filter expression as JSON string
         group_by: Optional grouping parameter for list_recommendation_summaries
         include_all_recommendations: Whether to include all recommendations
@@ -139,6 +140,13 @@ async def cost_optimization_hub(
         a single response when multiple pages are available.
     """
     try:
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "cost_optimization_hub",
+            "max_results",
+            min_value=1
+        )
         # ===== Account context initialization =====
         if target_account_id:
             from entrypoint import _setup_account_context
@@ -193,7 +201,7 @@ async def cost_optimization_hub(
                     ctx,
                     coh_client,
                     group_by=effective_group_by,
-                    max_results=int(max_results) if max_results else None,
+                    max_results=parsed_max_results,
                     filters=parsed_filters,
                 )
 
@@ -231,7 +239,7 @@ async def cost_optimization_hub(
                 parsed_filters = parse_json(filters, 'filters') if filters else None
 
                 result = await list_recommendations(
-                    ctx, coh_client, max_results, parsed_filters, include_all_recommendations
+                    ctx, coh_client, parsed_max_results, parsed_filters, include_all_recommendations
                 )
 
                 # Add the operation parameters to the response for diagnostics
@@ -284,6 +292,12 @@ async def cost_optimization_hub(
             )
 
     # ===== Exception handling =====
+    except ValueError as e:
+        return format_response(
+            'error',
+            {'error_type': 'validation_error', 'details': str(e)},
+            f'Invalid parameter: {str(e)}'
+        )
     except AccountNotFoundError:
         return format_response('error', {'error_type': 'account_not_found'},
                                'Account not found. Please check the account ID.')

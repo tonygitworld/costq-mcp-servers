@@ -24,10 +24,11 @@ from ..utilities.aws_service_base import (
     validate_date_format,
 )
 from ..utilities.logging_utils import get_context_logger
+from ..utilities.type_parsers import parse_int_param
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 from fastmcp import Context, FastMCP
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 # Import account context exceptions
 from entrypoint import (
@@ -68,7 +69,7 @@ async def cost_anomaly(
     end_date: str = None,
     monitor_arn: Optional[str] = None,
     feedback: Optional[str] = None,
-    max_results: Optional[int] = None,
+    max_results: Optional[Union[str, int]] = None,
     total_impact_operator: Optional[str] = None,
     total_impact_start: Optional[float] = None,
     total_impact_end: Optional[float] = None,
@@ -82,7 +83,7 @@ async def cost_anomaly(
         end_date: End date in YYYY-MM-DD format. Required.
         monitor_arn: Optional ARN of a specific cost anomaly monitor to filter results.
         feedback: Optional filter for anomalies by feedback status (YES, NO, PLANNED_ACTIVITY).
-        max_results: Optional maximum number of results to return.
+        max_results: Optional maximum number of results to return. Accepts string or integer.
         total_impact_operator: Optional numeric operator for filtering by total impact (EQUAL, GREATER_THAN, LESS_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN_OR_EQUAL, BETWEEN).
         total_impact_start: Optional start value for total impact filter.
         total_impact_end: Optional end value for total impact filter (required when using BETWEEN operator).
@@ -194,6 +195,14 @@ async def cost_anomaly(
         # Initialize Cost Explorer client using shared utility
         ce_client = create_aws_client('ce', region_name='us-east-1')
 
+        # ===== Parameter parsing =====
+        parsed_max_results = parse_int_param(
+            max_results,
+            "cost_anomaly",
+            "max_results",
+            min_value=1
+        )
+
         return await get_anomalies(
             ctx,
             ce_client,
@@ -201,7 +210,7 @@ async def cost_anomaly(
             end_date,
             monitor_arn,
             feedback,
-            max_results,
+            parsed_max_results,
             total_impact_operator,
             total_impact_start,
             total_impact_end,
