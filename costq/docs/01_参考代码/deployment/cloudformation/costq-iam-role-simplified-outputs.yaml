@@ -1,6 +1,0 @@
-Outputs:
-  RoleArn:
-    Description: "IAM Role ARN - Copy this and paste into CostQ platform"
-    Value: !GetAtt CostQIAMRole.Arn
-    Export:
-      Name: !Sub "${AWS::StackName}-RoleArn"
