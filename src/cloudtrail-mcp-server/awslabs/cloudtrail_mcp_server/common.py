@@ -17,7 +17,7 @@
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -136,41 +136,20 @@ def parse_time_input(time_input: str) -> datetime:
 
 
 def validate_max_results(
-    max_results: Optional[Union[int, str]], default: int = 10, max_allowed: int = 50
+    max_results: Optional[int], default: int = 10, max_allowed: int = 50
 ) -> int:
     """Validate and return appropriate max_results value.
 
-    Supports both integer and string inputs for compatibility with different
-    upstream serialization behaviors (e.g., AgentCore Gateway).
-
     Args:
-        max_results: Requested max results (int or string)
+        max_results: Requested max results
         default: Default value if None
         max_allowed: Maximum allowed value
 
     Returns:
         Validated max_results value
-
-    Raises:
-        ValueError: If string cannot be converted to integer
     """
     if max_results is None:
         return default
-
-    # Smart handling: If it's a string, convert to int
-    if isinstance(max_results, str):
-        logger.warning(
-            "Received string for max_results, auto-converting: %s",
-            max_results
-        )
-        try:
-            max_results = int(max_results)
-        except ValueError as e:
-            logger.error(
-                "Invalid integer format for max_results: %s",
-                str(e)
-            )
-            raise ValueError(f"Invalid integer format for max_results: {e}")
 
     if max_results < 1:
         return 1

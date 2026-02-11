@@ -32,7 +32,7 @@ from awslabs.cloudtrail_mcp_server.models import (
 from botocore.config import Config
 from mcp.server.fastmcp import Context
 from pydantic import Field
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +114,8 @@ class CloudTrailTools:
             Optional[str], Field(description='Value to search for in the specified attribute')
         ] = None,
         max_results: Annotated[
-            Optional[Union[int, str]],
-            Field(
-                description='Maximum number of events to return (1-50, default: 10). '
-                           'Accepts integer or string.'
-            ),
+            Optional[int],
+            Field(description='Maximum number of events to return (1-50, default: 10)'),
         ] = None,
         next_token: Annotated[
             Optional[str],
@@ -519,11 +516,8 @@ class CloudTrailTools:
         ] = None,
         query_id: Annotated[str, Field(description='The ID of the query to get results for')] = None,
         max_results: Annotated[
-            Optional[Union[int, str]],
-            Field(
-                description='Maximum number of results to return per page (1-50, default: 50). '
-                           'Accepts integer or string.'
-            ),
+            Optional[int],
+            Field(description='Maximum number of results to return per page (1-50, default: 50)'),
         ] = None,
         next_token: Annotated[
             Optional[str],
