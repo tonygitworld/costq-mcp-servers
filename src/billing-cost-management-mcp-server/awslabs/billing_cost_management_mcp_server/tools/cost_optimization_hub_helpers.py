@@ -19,11 +19,10 @@ These functions handle the specific operations for the Cost Optimization Hub too
 
 from ..utilities.aws_service_base import format_response
 from ..utilities.logging_utils import get_context_logger
-from ..utilities.type_parsers import parse_int_param
 from botocore.exceptions import ClientError
 from datetime import datetime
 from fastmcp import Context
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 
 def format_timestamp(timestamp: Any) -> Optional[str]:
@@ -59,7 +58,7 @@ def format_timestamp(timestamp: Any) -> Optional[str]:
 async def list_recommendations(
     ctx: Context,
     coh_client: Any,
-    max_results: Optional[Union[str, int]] = None,
+    max_results: Optional[int] = None,
     filters: Optional[Dict[str, Any]] = None,
     include_all_recommendations: Optional[bool] = None,
 ) -> Dict[str, Any]:
@@ -68,21 +67,13 @@ async def list_recommendations(
     Args:
         ctx: MCP context
         coh_client: Cost Optimization Hub client
-        max_results: Maximum total results to return across all pages; None means all available. Accepts string or integer.
+        max_results: Maximum total results to return across all pages; None means all available
         filters: Optional filters dictionary
         include_all_recommendations: Whether to include all recommendations
 
     Returns:
         Dict containing recommendations from all pages
     """
-    # ===== Parameter parsing =====
-    parsed_max_results = parse_int_param(
-        max_results,
-        "list_recommendations",
-        "max_results",
-        min_value=1
-    )
-
     # Get context logger for consistent logging
     ctx_logger = get_context_logger(ctx, __name__)
 
@@ -107,8 +98,8 @@ async def list_recommendations(
                 request_params['nextToken'] = current_token
 
             # Add max_results for this page
-            if parsed_max_results:
-                remaining_results = parsed_max_results - len(all_recommendations)
+            if max_results:
+                remaining_results = max_results - len(all_recommendations)
                 if remaining_results <= 0:
                     break
                 request_params['maxResults'] = min(100, remaining_results)
@@ -351,7 +342,7 @@ async def list_recommendation_summaries(
     ctx: Context,
     coh_client: Any,
     group_by: str,
-    max_results: Optional[Union[str, int]] = None,
+    max_results: Optional[int] = None,
     filters: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """List recommendation summaries from Cost Optimization Hub.
@@ -360,20 +351,12 @@ async def list_recommendation_summaries(
         ctx: MCP context
         coh_client: Cost Optimization Hub client
         group_by: Grouping parameter
-        max_results: Maximum total results to return across all pages; None means all available. Accepts string or integer.
+        max_results: Maximum total results to return across all pages; None means all available
         filters: Optional filters dictionary
 
     Returns:
         Dict containing recommendation summaries from all pages
     """
-    # ===== Parameter parsing =====
-    parsed_max_results = parse_int_param(
-        max_results,
-        "list_recommendation_summaries",
-        "max_results",
-        min_value=1
-    )
-
     # Get context logger for consistent logging
     ctx_logger = get_context_logger(ctx, __name__)
 
@@ -397,8 +380,8 @@ async def list_recommendation_summaries(
                 request_params['nextToken'] = current_token
 
             # Add max_results for this page
-            if parsed_max_results:
-                remaining_results = parsed_max_results - len(all_summaries)
+            if max_results:
+                remaining_results = max_results - len(all_summaries)
                 if remaining_results <= 0:
                     break
                 request_params['maxResults'] = min(100, remaining_results)

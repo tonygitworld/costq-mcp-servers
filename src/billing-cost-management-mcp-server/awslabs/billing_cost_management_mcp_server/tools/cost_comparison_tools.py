@@ -23,9 +23,8 @@ from ..utilities.aws_service_base import (
     handle_aws_error,
     parse_json,
 )
-from ..utilities.type_parsers import parse_int_param
 from fastmcp import Context, FastMCP
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 # Import account context exceptions
 from entrypoint import (
@@ -105,7 +104,7 @@ async def cost_comparison(
     metric_for_comparison: str = None,
     group_by: Optional[str] = None,
     filter: Optional[str] = None,
-    max_results: Optional[Union[str, int]] = None,
+    max_results: Optional[int] = None,
     billing_view_arn: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Retrieves AWS cost comparison data using the Cost Explorer API.
@@ -121,20 +120,13 @@ async def cost_comparison(
         metric_for_comparison: The cost metric to compare (e.g., BlendedCost, UnblendedCost, AmortizedCost)
         group_by: Optional grouping of results as a JSON string (e.g., '[{"Type": "DIMENSION", "Key": "SERVICE"}]')
         filter: Optional filter to apply to the results as a JSON string
-        max_results: Maximum number of results to return. Accepts string or integer. (default: 10, max: 2000 for comparisons, max: 10 for drivers)
+        max_results: Maximum number of results to return (default: 10, max: 2000 for comparisons, max: 10 for drivers)
         billing_view_arn: Optional ARN of a specific billing view
 
     Returns:
         Dict containing the cost comparison information
     """
     try:
-        # ===== Parameter parsing =====
-        parsed_max_results = parse_int_param(
-            max_results,
-            "cost_comparison",
-            "max_results",
-            min_value=1
-        )
         # ===== Account context initialization =====
         if target_account_id:
             from entrypoint import _setup_account_context
@@ -157,7 +149,7 @@ async def cost_comparison(
                 metric_for_comparison,
                 group_by,
                 filter,
-                parsed_max_results,
+                max_results,
                 billing_view_arn,
             )
         elif operation == 'getCostComparisonDrivers':
@@ -171,7 +163,7 @@ async def cost_comparison(
                 metric_for_comparison,
                 group_by,
                 filter,
-                parsed_max_results,
+                max_results,
                 billing_view_arn,
             )
         else:
@@ -182,12 +174,6 @@ async def cost_comparison(
             )
 
     # ===== Exception handling =====
-    except ValueError as e:
-        return format_response(
-            'error',
-            {'error_type': 'validation_error', 'details': str(e)},
-            f'Invalid parameter: {str(e)}'
-        )
     except AccountNotFoundError:
         return format_response('error', {'error_type': 'account_not_found'},
                                'Account not found. Please check the account ID.')
