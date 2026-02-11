@@ -23,9 +23,8 @@ Key design principle:
 - Compatible with AgentCore Gateway tools/list endpoint
 """
 
-import json
 import logging
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any, Optional
 
 from mcp.server.fastmcp import Context
 from pydantic import Field
@@ -51,57 +50,6 @@ from utils.formatters import (
 logger = logging.getLogger(__name__)
 
 
-def parse_filter_expression(filter_expression: Optional[Union[str, dict]], function_name: str) -> Optional[dict]:
-    """解析 filter_expression 参数,支持调试日志.
-
-    Args:
-        filter_expression: JSON 字符串或 None
-        function_name: 调用此函数的函数名(用于日志)
-
-    Returns:
-        解析后的 dict 或 None
-
-    Raises:
-        ValueError: 如果 JSON 格式无效
-    """
-    if not filter_expression:
-        return None
-
-    # 🔍 调试日志: 记录接收到的类型和值
-    logger.info(
-        "🔍 [%s] filter_expression type: %s, value: %s",
-        function_name,
-        type(filter_expression).__name__,
-        str(filter_expression)[:200]  # 限制长度避免日志过长
-    )
-
-    # 如果已经是 dict,说明上游没有正确序列化,我们这里帮忙转换
-    if isinstance(filter_expression, dict):
-        logger.warning(
-            "⚠️ [%s] Received dict instead of string! Auto-converting...",
-            function_name
-        )
-        return filter_expression
-
-    # 正常的 JSON 字符串解析
-    try:
-        filter_dict = json.loads(filter_expression)
-        logger.info(
-            "✅ [%s] Successfully parsed filter_expression",
-            function_name
-        )
-        return filter_dict
-    except json.JSONDecodeError as e:
-        logger.error(
-            "❌ [%s] Invalid JSON format for filter_expression: %s",
-            function_name,
-            str(e)
-        )
-        raise ValueError(
-            f"Invalid JSON format for filter_expression: {e}"
-        )
-
-
 async def get_savings_plans_utilization(
     ctx: Context,
     start_date: Annotated[str, Field(description="Start date in YYYY-MM-DD format")],
@@ -111,13 +59,10 @@ async def get_savings_plans_utilization(
         Field(description="Time granularity: DAILY or MONTHLY. Default is MONTHLY"),
     ] = "MONTHLY",
     filter_expression: Annotated[
-        Optional[Union[str, dict]],
+        Optional[dict],
         Field(
-            description=(
-                "Filter expression for Cost Explorer API as a JSON string or dict object. "
-                "Supported dimensions: LINKED_ACCOUNT, SAVINGS_PLAN_ARN, SAVINGS_PLANS_TYPE, REGION, PAYMENT_OPTION, INSTANCE_TYPE_FAMILY. "
-                "Example: '{\"Dimensions\": {\"Key\": \"SAVINGS_PLANS_TYPE\", \"Values\": [\"Compute\"]}}'"
-            )
+            description="Filter expression for Cost Explorer API. "
+            "Supported dimensions: LINKED_ACCOUNT, SAVINGS_PLAN_ARN, SAVINGS_PLANS_TYPE, REGION, PAYMENT_OPTION, INSTANCE_TYPE_FAMILY"
         ),
     ] = None,
     sort_key: Annotated[
@@ -254,10 +199,8 @@ async def get_savings_plans_utilization(
         if granularity:
             request_params["Granularity"] = granularity
 
-        # Parse filter_expression from JSON string if provided
-        filter_dict = parse_filter_expression(filter_expression, "get_savings_plans_utilization")
-        if filter_dict:
-            request_params["Filter"] = filter_dict
+        if filter_expression:
+            request_params["Filter"] = filter_expression
 
         if sort_key:
             request_params["SortBy"] = {
@@ -351,13 +294,10 @@ async def get_savings_plans_coverage(
         ),
     ] = None,
     filter_expression: Annotated[
-        Optional[Union[str, dict]],
+        Optional[dict],
         Field(
-            description=(
-                "Filter expression for Cost Explorer API as a JSON string or dict object. "
-                "Supported dimensions: LINKED_ACCOUNT, REGION, SERVICE, INSTANCE_FAMILY. "
-                "Example: '{\"Dimensions\": {\"Key\": \"SERVICE\", \"Values\": [\"Amazon Elastic Compute Cloud - Compute\"]}}'"
-            )
+            description="Filter expression for Cost Explorer API. "
+            "Supported dimensions: LINKED_ACCOUNT, REGION, SERVICE, INSTANCE_FAMILY"
         ),
     ] = None,
     sort_key: Annotated[
@@ -503,10 +443,8 @@ async def get_savings_plans_coverage(
             # 只有在不使用 GroupBy 时，才添加 Granularity
             request_params["Granularity"] = granularity
 
-        # Parse filter_expression from JSON string if provided
-        filter_dict = parse_filter_expression(filter_expression, "get_savings_plans_coverage")
-        if filter_dict:
-            request_params["Filter"] = filter_dict
+        if filter_expression:
+            request_params["Filter"] = filter_expression
 
         if sort_key:
             request_params["SortBy"] = {
@@ -610,13 +548,8 @@ async def get_savings_plans_purchase_recommendation(
         Field(description="Account scope: PAYER or LINKED"),
     ] = None,
     filter_expression: Annotated[
-        Optional[Union[str, dict]],
-        Field(
-            description=(
-                "Filter expression for Cost Explorer API as a JSON string or dict object. "
-                "Example: '{\"Dimensions\": {\"Key\": \"INSTANCE_FAMILY\", \"Values\": [\"m5\"]}}'"
-            )
-        ),
+        Optional[dict],
+        Field(description="Filter expression for Cost Explorer API"),
     ] = None,
     page_size: Annotated[
         Optional[int],
@@ -727,10 +660,8 @@ async def get_savings_plans_purchase_recommendation(
         if account_scope:
             request_params["AccountScope"] = account_scope
 
-        # Parse filter_expression from JSON string if provided
-        filter_dict = parse_filter_expression(filter_expression, "get_savings_plans_purchase_recommendation")
-        if filter_dict:
-            request_params["Filter"] = filter_dict
+        if filter_expression:
+            request_params["Filter"] = filter_expression
 
         if page_size:
             request_params["PageSize"] = page_size
@@ -952,13 +883,8 @@ async def get_savings_plans_utilization_details(
         ),
     ] = None,
     filter_expression: Annotated[
-        Optional[Union[str, dict]],
-        Field(
-            description=(
-                "Filter expression for Cost Explorer API as a JSON string or dict object. "
-                "Example: '{\"Dimensions\": {\"Key\": \"SAVINGS_PLAN_ARN\", \"Values\": [\"arn:aws:savingsplans::123456789012:savingsplan/sp-123abc\"]}}'"
-            )
-        ),
+        Optional[dict],
+        Field(description="Filter expression for Cost Explorer API"),
     ] = None,
     sort_by: Annotated[
         Optional[dict],
@@ -1062,10 +988,8 @@ async def get_savings_plans_utilization_details(
         if data_type:
             request_params["DataType"] = data_type
 
-        # Parse filter_expression from JSON string if provided
-        filter_dict = parse_filter_expression(filter_expression, "get_savings_plans_utilization_details")
-        if filter_dict:
-            request_params["Filter"] = filter_dict
+        if filter_expression:
+            request_params["Filter"] = filter_expression
 
         if sort_by:
             request_params["SortBy"] = sort_by
