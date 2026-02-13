@@ -13,11 +13,14 @@
 # limitations under the License.
 """Debug helper module for AWS Support MCP Server."""
 
+import logging
 import time
 import traceback
 from functools import wraps
-from loguru import logger
 from typing import Any, Callable, Dict, ParamSpec, Protocol, TypeVar, Union, cast
+
+
+logger = logging.getLogger(__name__)
 
 
 class DiagnosticsTracker:

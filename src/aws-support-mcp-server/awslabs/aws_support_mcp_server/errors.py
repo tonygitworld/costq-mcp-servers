@@ -13,12 +13,16 @@
 # limitations under the License.
 """Error handling utilities for the AWS Support MCP Server."""
 
+import logging
 import time
+from typing import Any, Dict, Optional, Union
+
 from awslabs.aws_support_mcp_server.consts import ERROR_CODE_MAP
 from botocore.exceptions import ClientError
-from loguru import logger
 from pydantic import ValidationError
-from typing import Any, Dict, Optional, Union
+
+
+logger = logging.getLogger(__name__)
 
 
 async def handle_client_error(ctx: Any, e: ClientError, operation: str) -> Dict[str, Any]:

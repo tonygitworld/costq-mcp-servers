@@ -64,7 +64,6 @@ dependencies = [
     { name = "boto3" },
     { name = "fastmcp" },
     { name = "langdetect" },
-    { name = "loguru" },
     { name = "markdownify" },
     { name = "mcp", extra = ["cli"] },
     { name = "pre-commit" },
@@ -92,7 +91,6 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.38.12" },
     { name = "fastmcp", specifier = ">=2.14.0" },
     { name = "langdetect", specifier = ">=1.0.9" },
-    { name = "loguru", specifier = ">=0.7.0" },
     { name = "markdownify", specifier = ">=0.13.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.23.0" },
     { name = "pre-commit", specifier = ">=4.2.0" },
@@ -863,19 +861,6 @@ dependencies = [
     { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2569554f7c70f4a3c27712f40e3284d483e88094cc0e/langdetect-1.0.9.tar.gz", hash = "sha256:cbc1fef89f8d062739774bd51eda3da3274006b3661d199c2655f6b3f6d605a0", size = 981474, upload-time = "2021-05-07T07:54:13.562Z" }
-
-[[package]]
-name = "loguru"
-version = "0.7.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
-    { name = "win32-setctime", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3a/05/a1dae3dffd1116099471c643b8924f5aa6524411dc6c63fdae648c4f1aca/loguru-0.7.3.tar.gz", hash = "sha256:19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6", size = 63559, upload-time = "2024-12-06T11:20:56.608Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0c/29/0348de65b8cc732daa3e33e67806420b2ae89bdce2b04af740289c5c6c8c/loguru-0.7.3-py3-none-any.whl", hash = "sha256:31a33c10c8e1e10422bfd431aeb5d351c7cf7fa671e3c4df004162264b28220c", size = 61595, upload-time = "2024-12-06T11:20:54.538Z" },
-]
 
 [[package]]
 name = "lupa"

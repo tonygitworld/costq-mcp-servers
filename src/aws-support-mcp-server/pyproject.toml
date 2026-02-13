@@ -8,7 +8,6 @@ dependencies = [
     "boto3>=1.38.12",
     "fastmcp>=2.14.0",
     "langdetect>=1.0.9",
-    "loguru>=0.7.0",
     "markdownify>=0.13.1",
     "mcp[cli]>=1.23.0",
     "pre-commit>=4.2.0",
@@ -51,6 +50,9 @@ dev = [
 
 [tool.setuptools]
 packages = ["awslabs", "awslabs.aws_support_mcp_server"]
+
+[tool.uv]
+package = true
 
 [tool.ruff]
 line-length = 99

@@ -2495,78 +2495,13 @@ class TestDiagnosticsTracker:
 class TestServer:
     """Tests for the MCP server implementation."""
 
-    @patch('awslabs.aws_support_mcp_server.server.logger')
-    def test_logging_configuration(self, mock_logger):
-        """Test logging configuration."""
-        import sys
+    @patch('awslabs.aws_support_mcp_server.server.mcp.run')
+    @patch('logging.basicConfig')
+    def test_main_runs_streamable_http(self, mock_basic_config, mock_run):
+        """Test main function runs with streamable HTTP transport."""
         from awslabs.aws_support_mcp_server.server import main
 
-        # Create mock arguments
-        sys.argv = ['server.py', '--debug']
+        main()
 
-        # Call main (but mock the actual server run)
-        with patch('awslabs.aws_support_mcp_server.server.mcp.run'):
-            main()
-
-        # Verify logging configuration
-        mock_logger.remove.assert_called()
-        mock_logger.add.assert_called()
-        # Verify debug level was set
-        assert any('DEBUG' in str(call) for call in mock_logger.add.call_args_list)
-
-    @patch('awslabs.aws_support_mcp_server.server.logger')
-    @patch('os.path.exists')
-    @patch('os.makedirs')
-    def test_main_with_log_file_and_directory_creation(
-        self, mock_makedirs, mock_exists, mock_logger
-    ):
-        """Test main function with log file argument and directory creation."""
-        import sys
-        from awslabs.aws_support_mcp_server.server import main
-
-        # Setup
-        tmpdir = tempfile.mkdtemp()
-        sys.argv = ['server.py', '--debug', '--log-file', f'{tmpdir}/test/server.log']
-        mock_exists.return_value = False  # Directory doesn't exist
-
-        # Call main (but mock the actual server run)
-        with patch('awslabs.aws_support_mcp_server.server.mcp.run'):
-            main()
-
-        # Verify directory was created
-        mock_makedirs.assert_called_once_with(f'{tmpdir}/test')
-        # Verify logging was configured
-        assert mock_logger.add.call_count >= 2  # Console and file logging
-
-    @patch('awslabs.aws_support_mcp_server.server.logger')
-    def test_main_without_debug_flag(self, mock_logger):
-        """Test main function without debug flag."""
-        import sys
-        from awslabs.aws_support_mcp_server.server import main
-
-        # Setup
-        sys.argv = ['server.py']
-
-        # Call main (but mock the actual server run)
-        with patch('awslabs.aws_support_mcp_server.server.mcp.run'):
-            main()
-
-        # Verify INFO level logging was set (not DEBUG)
-        assert any('INFO' in str(call) for call in mock_logger.add.call_args_list)
-
-    @patch('awslabs.aws_support_mcp_server.server.logger')
-    @patch('awslabs.aws_support_mcp_server.server.diagnostics')
-    def test_main_debug_enables_diagnostics(self, mock_diagnostics, mock_logger):
-        """Test main function with debug flag enables diagnostics."""
-        import sys
-        from awslabs.aws_support_mcp_server.server import main
-
-        # Setup
-        sys.argv = ['server.py', '--debug']
-
-        # Call main (but mock the actual server run)
-        with patch('awslabs.aws_support_mcp_server.server.mcp.run'):
-            main()
-
-        # Verify diagnostics were enabled
-        mock_diagnostics.enable.assert_called_once()
+        mock_basic_config.assert_called_once()
+        mock_run.assert_called_once_with(transport='streamable-http')

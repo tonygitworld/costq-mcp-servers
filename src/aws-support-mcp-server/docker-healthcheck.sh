@@ -1,3 +1,4 @@
+#!/bin/sh
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,7 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""AWS Support MCP Server package."""
 
-# Export version
-__version__ = '0.1.15'
+SERVER="aws-support-mcp-server"
+
+# Check if the server process is running
+if pgrep -P 0 -a -l -x -f "/app/.venv/bin/python3? /app/.venv/bin/awslabs.$SERVER" > /dev/null; then
+  echo -n "$SERVER is running";
+  exit 0;
+fi;
+
+# Unhealthy
+exit 1;

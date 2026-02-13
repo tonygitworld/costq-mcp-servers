@@ -13,9 +13,10 @@
 # limitations under the License.
 """AWS Support MCP Server implementation."""
 
-import argparse
+import logging
 import os
-import sys
+from typing import Any, Dict, List, Optional
+
 from awslabs.aws_support_mcp_server.client import SupportClient
 from awslabs.aws_support_mcp_server.consts import (
     DEFAULT_ISSUE_TYPE,
@@ -23,7 +24,6 @@ from awslabs.aws_support_mcp_server.consts import (
     DEFAULT_REGION,
 )
 from awslabs.aws_support_mcp_server.debug_helper import (
-    diagnostics,
     get_diagnostics_report,
     track_errors,
     track_performance,
@@ -52,14 +52,37 @@ from awslabs.aws_support_mcp_server.models import (
 )
 from botocore.exceptions import ClientError
 from fastmcp import Context, FastMCP
-from loguru import logger
 from pydantic import Field, ValidationError
-from typing import Any, Dict, List, Optional
+
+from cred_extract_services.context_manager import set_aws_credentials
+from cred_extract_services.credential_extractor import extract_aws_credentials
+from cred_extract_services.exceptions import (
+    AccountNotFoundError,
+    AssumeRoleError,
+    CredentialDecryptionError,
+    CredentialExtractionError,
+    DatabaseConnectionError,
+)
+
+
+logger = logging.getLogger(__name__)
+
+# 导出异常类，便于调用方捕获
+__all__ = [
+    "_setup_account_context",
+    "mcp",
+    "main",
+    "CredentialExtractionError",
+    "AccountNotFoundError",
+    "CredentialDecryptionError",
+    "AssumeRoleError",
+    "DatabaseConnectionError",
+]
 
 
 # Initialize the MCP server
 mcp = FastMCP(
-    'awslabs_support_mcp_server',
+    name='awslabs.aws-support-mcp-server',
     instructions="""
     # AWS Support API MCP Server
 
@@ -204,17 +227,69 @@ mcp = FastMCP(
        - Include context about what the attachment shows
        - Use attachment sets within their 1-hour expiry window
     """,
+    host="0.0.0.0",
+    stateless_http=True,
+    port=8000,
 )
 
-# Initialize the AWS Support client
-try:
-    support_client = SupportClient(
+
+async def _setup_account_context(
+    target_account_id: str,
+) -> dict[str, str]:
+    """设置 AWS 凭证上下文
+
+    统一入口函数，完成以下操作：
+    1. 查询账号信息（自包含数据库查询）
+    2. 提取凭证（AKSK 解密 / IAM Role AssumeRole）
+    3. 设置环境变量
+
+    Args:
+        target_account_id: AWS 账号 ID（数据库主键）
+
+    Returns:
+        凭证信息字典（用于日志记录，已脱敏）
+
+    Raises:
+        AccountNotFoundError: 账号不存在
+        CredentialDecryptionError: 凭证解密失败
+        AssumeRoleError: AssumeRole 失败
+        DatabaseConnectionError: 数据库连接失败
+    """
+    logger.info("开始设置 AWS 凭证上下文")
+
+    # 1. 提取凭证
+    credentials = await extract_aws_credentials(target_account_id)
+
+    # 2. 设置环境变量
+    set_aws_credentials(
+        access_key_id=credentials["access_key_id"],
+        secret_access_key=credentials["secret_access_key"],
+        session_token=credentials.get("session_token"),
+        region=credentials["region"],
+    )
+
+    # 3. 返回脱敏信息（用于日志）
+    cred_info = {
+        "account_id": credentials["account_id"],
+        "account_alias": credentials.get("alias", "Unknown"),
+        "auth_type": credentials["auth_type"],
+        "region": credentials["region"],
+    }
+
+    logger.info("AWS 凭证上下文设置完成: %s", cred_info)
+    return cred_info
+
+
+def _create_support_client() -> SupportClient:
+    """Create a new SupportClient using current environment credentials.
+
+    This function creates a fresh client each time, so it picks up
+    credentials set by _setup_account_context() for multi-account access.
+    """
+    return SupportClient(
         region_name=os.environ.get('AWS_REGION', DEFAULT_REGION),
         profile_name=os.environ.get('AWS_PROFILE'),
     )
-except Exception as e:
-    logger.error(f'Failed to initialize AWS Support client: {str(e)}')
-    raise
 
 
 @mcp.resource(uri='resource://diagnostics', name='Diagnostics', mime_type='application/json')
@@ -257,6 +332,7 @@ async def diagnostics_resource() -> str:
 
 async def _create_support_case_logic(
     ctx: Context,
+    client: SupportClient,
     subject: str,
     service_code: str,
     category_code: str,
@@ -271,7 +347,7 @@ async def _create_support_case_logic(
     try:
         # Create the case
         logger.info(f'Creating support case: {subject}')
-        response = await support_client.create_case(
+        response = await client.create_case(
             subject=subject,
             service_code=service_code,
             severity_code=severity_code,
@@ -318,6 +394,9 @@ async def create_support_case(
         description='The severity code for the issue. Use describe_severity_levels to get valid codes.',
     ),
     communication_body: str = Field(..., description='The initial communication for the case'),
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
+    ),
     cc_email_addresses: Optional[List[str]] = Field(
         None, description='Email addresses to CC on the case'
     ),
@@ -353,8 +432,13 @@ async def create_support_case(
     - urgent (Production system down): Your business is significantly impacted and no workaround exists.
     - critical (Business-critical system down): Your business is at risk and critical functions are unavailable.
     """
+    if target_account_id:
+        await _setup_account_context(target_account_id)
+
+    client = _create_support_client()
     return await _create_support_case_logic(
         ctx,
+        client,
         subject,
         service_code,
         category_code,
@@ -369,6 +453,7 @@ async def create_support_case(
 
 async def _describe_support_cases_logic(
     ctx: Context,
+    client: SupportClient,
     case_id_list: Optional[List[str]] = None,
     display_id: Optional[str] = None,
     after_time: Optional[str] = None,
@@ -384,7 +469,7 @@ async def _describe_support_cases_logic(
     try:
         # Retrieve the cases
         logger.info('Retrieving support cases')
-        response = await support_client.describe_cases(
+        response = await client.describe_cases(
             case_id_list=case_id_list,
             display_id=display_id,
             after_time=after_time,
@@ -423,6 +508,9 @@ async def _describe_support_cases_logic(
 @track_request('describe_support_cases')
 async def describe_support_cases(
     ctx: Context,
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
+    ),
     case_id_list: Optional[List[str]] = Field(None, description='List of case IDs to retrieve'),
     display_id: Optional[str] = Field(None, description='The display ID of the case'),
     after_time: Optional[str] = Field(
@@ -466,8 +554,13 @@ async def describe_support_cases(
     ## Response Format
     You can request the response in either JSON or Markdown format using the format parameter.
     """
+    if target_account_id:
+        await _setup_account_context(target_account_id)
+
+    client = _create_support_client()
     return await _describe_support_cases_logic(
         ctx,
+        client,
         case_id_list,
         display_id,
         after_time,
@@ -487,6 +580,9 @@ async def describe_support_cases(
 @track_request('describe_severity_levels')
 async def describe_severity_levels(
     ctx: Context,
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
+    ),
     format: str = Field('json', description='The format of the response in markdown or json'),
 ) -> Dict[str, Any]:
     """Retrieve information about AWS Support severity levels. This tool provides details about the available severity levels for AWS Support cases, including their codes and descriptions.
@@ -512,10 +608,14 @@ async def describe_severity_levels(
     - critical (Business-critical system down): Your business is at risk; critical functions unavailable
 
     """
+    if target_account_id:
+        await _setup_account_context(target_account_id)
+
+    client = _create_support_client()
     try:
         # Retrieve severity levels from the AWS Support API
         logger.debug('Retrieving AWS severity levels')
-        response = await support_client.describe_severity_levels()
+        response = await client.describe_severity_levels()
 
         # Format the severity levels data
         severity_levels = format_severity_levels(response.get('severityLevels', []))
@@ -534,6 +634,7 @@ async def describe_severity_levels(
 
 async def _add_communication_to_case_logic(
     ctx: Context,
+    client: SupportClient,
     case_id: str,
     communication_body: str,
     cc_email_addresses: Optional[List[str]] = None,
@@ -543,7 +644,7 @@ async def _add_communication_to_case_logic(
     try:
         # Add the communication
         logger.info(f'Adding communication to support case: {case_id}')
-        response = await support_client.add_communication_to_case(
+        response = await client.add_communication_to_case(
             case_id=case_id,
             communication_body=communication_body,
             cc_email_addresses=cc_email_addresses,
@@ -574,6 +675,9 @@ async def add_communication_to_case(
     ctx: Context,
     case_id: str = Field(..., description='The ID of the support case'),
     communication_body: str = Field(..., description='The text of the communication'),
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
+    ),
     cc_email_addresses: Optional[List[str]] = Field(
         None, description='Email addresses to CC on the communication'
     ),
@@ -595,20 +699,25 @@ async def add_communication_to_case(
     )
     ```
     """
+    if target_account_id:
+        await _setup_account_context(target_account_id)
+
+    client = _create_support_client()
     return await _add_communication_to_case_logic(
-        ctx, case_id, communication_body, cc_email_addresses, attachment_set_id
+        ctx, client, case_id, communication_body, cc_email_addresses, attachment_set_id
     )
 
 
 async def _resolve_support_case_logic(
     ctx: Context,
+    client: SupportClient,
     case_id: str,
 ) -> Dict[str, Any]:
     """Business logic for resolving a support case."""
     try:
         # Resolve the case
         logger.info(f'Resolving support case: {case_id}')
-        response = await support_client.resolve_case(case_id=case_id)
+        response = await client.resolve_case(case_id=case_id)
 
         # Create a response model
         result = ResolveCaseResponse(
@@ -634,6 +743,9 @@ async def _resolve_support_case_logic(
 async def resolve_support_case(
     ctx: Context,
     case_id: str = Field(..., description='The ID of the support case'),
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
+    ),
 ) -> Dict[str, Any]:
     """Resolve a support case.
 
@@ -646,7 +758,11 @@ async def resolve_support_case(
     resolve_support_case(case_id='case-12345678910-2013-c4c1d2bf33c5cf47')
     ```
     """
-    return await _resolve_support_case_logic(ctx, case_id)
+    if target_account_id:
+        await _setup_account_context(target_account_id)
+
+    client = _create_support_client()
+    return await _resolve_support_case_logic(ctx, client, case_id)
 
 
 @mcp.tool(name='describe_services')
@@ -655,6 +771,9 @@ async def resolve_support_case(
 @track_request('describe_services')
 async def describe_services(
     ctx: Context,
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
+    ),
     service_code_list: Optional[List[str]] = Field(
         None, description='Optional list of service codes to filter results'
     ),
@@ -703,10 +822,14 @@ async def describe_services(
     }
     ```
     """
+    if target_account_id:
+        await _setup_account_context(target_account_id)
+
+    client = _create_support_client()
     try:
         # Retrieve services from the AWS Support API
         logger.debug('Retrieving AWS services')
-        response = await support_client.describe_services(
+        response = await client.describe_services(
             language=language, service_code_list=service_code_list
         )
 
@@ -726,74 +849,13 @@ async def describe_services(
 
 
 def main():
-    """Run the MCP server with CLI argument support."""
-    parser = argparse.ArgumentParser(description='AWS Support API MCP Server')
-    parser.add_argument(
-        '--log-file',
-        type=str,
-        help='Path to save the log file. If not provided with --debug, logs to stderr only',
-    )
-    parser.add_argument('--port', type=int, default=8888, help='Port to run the server on')
-    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
-
-    args = parser.parse_args()
-
-    # Configure logging based on debug flag
-    # First remove default loggers
-    logger.remove()
-
-    # Set up console logging with appropriate level
-    log_level = 'DEBUG' if args.debug else 'INFO'
-    logger.add(
-        sys.stderr,
-        level=log_level,
-        format='<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>',
+    """Run the MCP server with streamable HTTP transport for AgentCore."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s | %(levelname)s | %(name)s:%(funcName)s:%(lineno)d - %(message)s',
     )
 
-    # Set up file logging if debug mode is enabled and log file path is provided
-    if args.debug:
-        # Configure enhanced logging format for debug mode
-        diagnostics_format = '{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {thread}:{process} | {extra} - {message}'
-
-        # Configure logger with extra diagnostic info
-        logger.configure(extra={'diagnostics': True})
-
-        # Enable diagnostics tracking
-        diagnostics.enable()
-
-        # Set up file logging if log file path is provided
-        if args.log_file:
-            log_file = os.path.abspath(args.log_file)
-            # Create log directory if it doesn't exist
-            log_dir = os.path.dirname(log_file)
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir)
-                logger.info(f'Created log directory: {log_dir}')
-
-            logger.add(
-                log_file,
-                level='DEBUG',
-                rotation='10 MB',
-                retention='1 week',
-                format=diagnostics_format,
-            )
-            logger.info(f'AWS Support MCP Server starting up. Log file: {log_file}')
-
-    logger.info(f'Debug mode: {args.debug}')
-
-    if args.debug:
-        # Enable more detailed error tracking and performance monitoring
-        logger.debug('Enabling detailed performance tracking and error monitoring')
-        # Hook into FastMCP to track performance
-        mcp.settings.debug = True
-        # You could add more diagnostics setup here
-
-    logger.debug('Starting awslabs_support_mcp_server MCP server')
-
-    # Log the startup mode
-    logger.info('Starting AWS Support MCP Server with stdio transport')
-    # Run with stdio transport
-    mcp.run(transport='stdio')
+    mcp.run(transport='streamable-http')
 
 
 if __name__ == '__main__':

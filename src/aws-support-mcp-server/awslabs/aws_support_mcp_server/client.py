@@ -14,8 +14,11 @@
 """AWS Support API client for the AWS Support MCP Server."""
 
 import asyncio
+import logging
 import boto3
 import re
+from typing import Any, Callable, Dict, List, Optional, Pattern, Union, cast
+
 from awslabs.aws_support_mcp_server import __version__
 from awslabs.aws_support_mcp_server.consts import (
     API_TIMEOUT,
@@ -28,8 +31,9 @@ from awslabs.aws_support_mcp_server.consts import (
 )
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
-from loguru import logger
-from typing import Any, Callable, Dict, List, Optional, Pattern, Union, cast
+
+
+logger = logging.getLogger(__name__)
 
 
 class SupportClient:
