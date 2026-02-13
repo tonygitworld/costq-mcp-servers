@@ -117,9 +117,9 @@ ENV UV_SYSTEM_PYTHON=1 \
 RUN pip install --no-cache-dir uv && \
     uv pip install --python /app/.venv/bin/python \
     aws-opentelemetry-distro==0.12.2 \
-    sqlalchemy>=2.0.0 \
-    psycopg2-binary>=2.9.0 \
-    cryptography>=41.0.0
+    "sqlalchemy>=2.0.0" \
+    "psycopg2-binary>=2.9.0" \
+    "cryptography>=41.0.0"
 
 # 使用已创建的 app 用户（Alpine 使用 adduser，前面已创建）
 USER app
