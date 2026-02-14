@@ -289,7 +289,7 @@ async def get_savings_plans_coverage(
     group_by: Annotated[
         Optional[list[str]],
         Field(
-            description="Dimensions to group by: INSTANCE_FAMILY, REGION, SERVICE. "
+            description="Dimensions to group by: INSTANCE_TYPE_FAMILY, REGION, SERVICE. "
             "Note: Cannot be used together with granularity"
         ),
     ] = None,
@@ -297,7 +297,7 @@ async def get_savings_plans_coverage(
         Optional[dict],
         Field(
             description="Filter expression for Cost Explorer API. "
-            "Supported dimensions: LINKED_ACCOUNT, REGION, SERVICE, INSTANCE_FAMILY"
+            "Supported dimensions: LINKED_ACCOUNT, REGION, SERVICE, INSTANCE_TYPE_FAMILY"
         ),
     ] = None,
     sort_key: Annotated[
@@ -346,7 +346,7 @@ async def get_savings_plans_coverage(
     - LINKED_ACCOUNT - Filter by specific AWS account
     - REGION - Filter by AWS region
     - SERVICE - Filter by AWS service (see supported services below)
-    - INSTANCE_FAMILY - Filter by instance family (e.g., "m5", "c5")
+    - INSTANCE_TYPE_FAMILY - Filter by instance family (e.g., "m5", "c5")
 
     **Services covered by Savings Plans:**
     - Compute/EC2 Instance Savings Plans: "Amazon Elastic Compute Cloud - Compute" (EC2), "AWS Lambda", "Amazon EC2 Container Service" (Fargate)
@@ -359,7 +359,7 @@ async def get_savings_plans_coverage(
     - Database Savings Plans are newer; many customers still use RDS/ElastiCache RIs
 
     **Supported GroupBy Dimensions:**
-    - INSTANCE_FAMILY - Group coverage by instance family
+    - INSTANCE_TYPE_FAMILY - Group coverage by instance family
     - REGION - Group coverage by region
     - SERVICE - Group coverage by AWS service (THIS IS THE KEY DIFFERENCE FROM get_savings_plans_utilization!)
 
