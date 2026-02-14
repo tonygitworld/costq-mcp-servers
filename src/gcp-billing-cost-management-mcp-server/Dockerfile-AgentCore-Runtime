@@ -1,0 +1,82 @@
+# GCP Billing Cost Management MCP Server - AgentCore Runtime Dockerfile
+
+# ============================================================================
+# Build Stage
+# ============================================================================
+FROM public.ecr.aws/docker/library/python:3.13-alpine@sha256:070342a0cc1011532c0e69972cce2bbc6cc633eba294bae1d12abea8bd05303b AS builder
+
+WORKDIR /app
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Build deps for cryptography + psycopg2
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    libffi-dev \
+    openssl-dev \
+    postgresql-dev
+
+RUN python -m venv /app/.venv
+
+# Install Python dependencies
+RUN /app/.venv/bin/pip install --no-cache-dir \
+    boto3==1.38.22 \
+    pydantic==2.11.7 \
+    'mcp[cli]==1.23.3' \
+    sqlalchemy==2.0.36 \
+    psycopg2-binary==2.9.10 \
+    cryptography==44.0.0 \
+    google-cloud-billing>=1.17.0 \
+    google-cloud-resource-manager>=1.13.0 \
+    google-cloud-bigquery>=3.14.1 \
+    google-cloud-recommender>=2.17.0 \
+    google-cloud-billing-budgets>=1.16.0 \
+    google-cloud-compute>=1.14.0 \
+    pytz>=2024.1
+
+COPY . /app
+
+RUN find /app -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true && \
+    find /app -type f -name '*.pyc' -delete 2>/dev/null || true
+
+# ============================================================================
+# Production Stage
+# ============================================================================
+FROM public.ecr.aws/docker/library/python:3.13-alpine@sha256:070342a0cc1011532c0e69972cce2bbc6cc633eba294bae1d12abea8bd05303b
+
+WORKDIR /app
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    AWS_REGION=ap-northeast-1 \
+    AWS_DEFAULT_REGION=ap-northeast-1
+
+RUN apk add --no-cache \
+    ca-certificates \
+    postgresql-libs \
+    libffi \
+    && update-ca-certificates
+
+RUN addgroup -g 1000 -S app && \
+    adduser -u 1000 -S app -G app -h /app
+
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --from=builder --chown=app:app /app /app
+
+# 安装 OpenTelemetry 相关依赖（避免与 GCP protobuf 依赖冲突）
+RUN /app/.venv/bin/pip install --no-cache-dir \
+    aws-opentelemetry-distro==0.12.2
+
+USER app
+
+EXPOSE 8000 8080 9000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD pgrep -f "python.*server" > /dev/null || exit 1
+
+CMD ["opentelemetry-instrument", "python", "server.py"]
