@@ -84,46 +84,95 @@ def format_ri_utilization_summary(response: dict[str, Any]) -> dict[str, Any]:
 
 
 def format_ri_coverage_summary(response: dict[str, Any]) -> dict[str, Any]:
-    """Format RI coverage summary for display."""
+    """Format RI coverage summary for display.
+
+    AWS GetReservationCoverage API returns Total as a nested Coverage object:
+    Total.CoverageHours.{CoverageHoursPercentage, OnDemandHours, ReservedHours, TotalRunningHours}
+    Total.CoverageCost.{OnDemandCost}
+    """
     total = response.get("Total", {})
+    coverage_hours = total.get("CoverageHours", {})
+    coverage_cost = total.get("CoverageCost", {})
     return {
-        "coverage_percentage": format_percentage(total.get("CoveragePercentage", "0")),
-        "on_demand_hours": format_hours(total.get("OnDemandHours", "0")),
-        "reserved_hours": format_hours(total.get("ReservedHours", "0")),
-        "total_running_hours": format_hours(total.get("TotalRunningHours", "0")),
-        "coverage_hours_percentage": format_percentage(total.get("CoverageHoursPercentage", "0")),
-        "on_demand_cost": format_currency(total.get("OnDemandCost", "0")),
-        "coverage_cost_percentage": format_percentage(total.get("CoverageCostPercentage", "0")),
+        "coverage_percentage": format_percentage(
+            coverage_hours.get("CoverageHoursPercentage", "0")
+        ),
+        "on_demand_hours": format_hours(coverage_hours.get("OnDemandHours", "0")),
+        "reserved_hours": format_hours(coverage_hours.get("ReservedHours", "0")),
+        "total_running_hours": format_hours(coverage_hours.get("TotalRunningHours", "0")),
+        "on_demand_cost": format_currency(coverage_cost.get("OnDemandCost", "0")),
     }
 
 
 def format_sp_utilization_summary(response: dict[str, Any]) -> dict[str, Any]:
-    """Format SP utilization summary for display."""
+    """Format SP utilization summary for display.
+
+    AWS GetSavingsPlansUtilization API returns Total as a nested SavingsPlansUtilizationAggregates:
+    Total.Utilization.{TotalCommitment, UsedCommitment, UnusedCommitment, UtilizationPercentage}
+    Total.Savings.{NetSavings, OnDemandCostEquivalent}
+    Total.AmortizedCommitment.{AmortizedRecurringCommitment, AmortizedUpfrontCommitment, TotalAmortizedCommitment}
+    """
     total = response.get("Total", {})
+    utilization = total.get("Utilization", {})
+    savings = total.get("Savings", {})
+    amortized = total.get("AmortizedCommitment", {})
     return {
-        "utilization_percentage": format_percentage(total.get("UtilizationPercentage", "0")),
-        "total_commitment": format_currency(total.get("TotalCommitment", "0")),
-        "used_commitment": format_currency(total.get("UsedCommitment", "0")),
-        "unused_commitment": format_currency(total.get("UnusedCommitment", "0")),
-        "utilization_percentage_in_units": format_percentage(
-            total.get("UtilizationPercentageInUnits", "0")
+        "utilization_percentage": format_percentage(
+            utilization.get("UtilizationPercentage", "0")
         ),
-        "amortized_commitment": format_currency(total.get("SavingsPlansAmortizedCommitment", "0")),
-        "on_demand_cost_equivalent": format_currency(total.get("OnDemandCostEquivalent", "0")),
-        "net_savings": format_currency(total.get("NetSavings", "0")),
+        "total_commitment": format_currency(utilization.get("TotalCommitment", "0")),
+        "used_commitment": format_currency(utilization.get("UsedCommitment", "0")),
+        "unused_commitment": format_currency(utilization.get("UnusedCommitment", "0")),
+        "amortized_commitment": format_currency(
+            amortized.get("TotalAmortizedCommitment", "0")
+        ),
+        "on_demand_cost_equivalent": format_currency(
+            savings.get("OnDemandCostEquivalent", "0")
+        ),
+        "net_savings": format_currency(savings.get("NetSavings", "0")),
     }
 
 
-def format_sp_coverage_summary(response: dict[str, Any]) -> dict[str, Any]:
-    """Format SP coverage summary for display."""
-    total = response.get("Total", {})
+def format_sp_coverage_summary(
+    response: dict[str, Any],
+    all_coverages: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Format SP coverage summary for display.
+
+    AWS GetSavingsPlansCoverage API has NO 'Total' field in the response.
+    Summary must be aggregated from the SavingsPlansCoverages array items.
+    Each item has: Coverage.{CoveragePercentage, OnDemandCost, SpendCoveredBySavingsPlans, TotalCost}
+    """
+    coverages = all_coverages or response.get("SavingsPlansCoverages", [])
+
+    if not coverages:
+        return {
+            "coverage_percentage": format_percentage("0"),
+            "on_demand_cost": format_currency("0"),
+            "spend_covered_by_savings_plans": format_currency("0"),
+            "total_cost": format_currency("0"),
+        }
+
+    total_on_demand = 0.0
+    total_covered = 0.0
+    total_cost = 0.0
+
+    for item in coverages:
+        coverage = item.get("Coverage", {})
+        try:
+            total_on_demand += float(coverage.get("OnDemandCost", "0"))
+            total_covered += float(coverage.get("SpendCoveredBySavingsPlans", "0"))
+            total_cost += float(coverage.get("TotalCost", "0"))
+        except (ValueError, TypeError):
+            continue
+
+    coverage_pct = (total_covered / total_cost * 100) if total_cost > 0 else 0.0
+
     return {
-        "coverage_percentage": format_percentage(total.get("CoveragePercentage", "0")),
-        "on_demand_spend": format_currency(total.get("OnDemandSpend", "0")),
-        "spend_covered_by_savings_plans": format_currency(
-            total.get("SpendCoveredBySavingsPlans", "0")
-        ),
-        "total_spend": format_currency(total.get("TotalSpend", "0")),
+        "coverage_percentage": format_percentage(str(coverage_pct)),
+        "on_demand_cost": format_currency(str(total_on_demand)),
+        "spend_covered_by_savings_plans": format_currency(str(total_covered)),
+        "total_cost": format_currency(str(total_cost)),
     }
 
 

@@ -478,7 +478,8 @@ async def get_savings_plans_coverage(
             )
 
             # 收集当前页的数据
-            page_coverages = response.get("SavingsPlansCoveragesByTime", [])
+            # Note: AWS API key is "SavingsPlansCoverages", NOT "SavingsPlansCoveragesByTime"
+            page_coverages = response.get("SavingsPlansCoverages", [])
             all_coverages_by_time.extend(page_coverages)
             logger.info(
                 f"Page {page_count}: Retrieved {len(page_coverages)} time periods, Total so far: {len(all_coverages_by_time)}"
@@ -493,15 +494,15 @@ async def get_savings_plans_coverage(
             f"Successfully retrieved all SP coverage data: {len(all_coverages_by_time)} time periods across {page_count} pages"
         )
 
-        # Format response
-        formatted_summary = format_sp_coverage_summary(response)
+        # Format response - SP Coverage API has no 'Total', aggregate from all coverages
+        formatted_summary = format_sp_coverage_summary(response, all_coverages_by_time)
 
         # Build detailed response with all paginated data
         result_data = {
             "raw_response": response,  # 最后一页的原始响应
             "coverage_summary": formatted_summary,
             "coverages_by_time": all_coverages_by_time,  # ✅ 所有页的数据
-            "total_coverage": response.get("Total", {}),
+            "total_coverage": formatted_summary,  # SP Coverage API 无 Total，用聚合结果填充
             "total_count": len(all_coverages_by_time),  # ✅ 添加总数
             "pages_retrieved": page_count,  # ✅ 添加页数
             "request_parameters": {
