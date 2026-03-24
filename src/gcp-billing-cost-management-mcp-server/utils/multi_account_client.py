@@ -191,18 +191,4 @@ def get_catalog_client_for_account(account_id: str | None = None) -> billing_v1.
         raise
 
 
-def get_compute_client_for_account(account_id: str | None = None):
-    """Get Compute Engine client for specified account
 
-    Args:
-        account_id: Optional GCP account ID. If None, uses default credentials.
-
-    Returns:
-        Compute Engine Client wrapper with access to various Compute APIs
-    """
-    # Import here to avoid circular dependency
-    from utils.compute_client import (
-        get_compute_client_for_account as _get_compute_client,
-    )
-
-    return _get_compute_client(account_id)

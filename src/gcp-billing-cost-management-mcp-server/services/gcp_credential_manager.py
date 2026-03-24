@@ -2,11 +2,13 @@
 
 import json
 import logging
+import os
 
-# 复用 AWS 凭证管理器的加密组件
-from .credential_manager import get_credential_manager
+from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
+
+ENCRYPTION_KEY_ENV = "ENCRYPTION_KEY"
 
 
 class GCPCredentialManager:
@@ -21,12 +23,16 @@ class GCPCredentialManager:
     def __init__(self):
         """初始化 GCP 凭证管理器
 
-        复用 AWS 凭证管理器的加密密钥，确保加密一致性
+        从环境变量 ENCRYPTION_KEY 读取 Fernet 密钥
         """
-        # 获取 AWS 凭证管理器实例（复用其加密组件）
-        self.aws_manager = get_credential_manager()
-        self.cipher = self.aws_manager.cipher
-        # logger.info("✅ GCP 凭证管理器初始化完成（复用 AWS 加密密钥）")  # 已静默 - 每次查询都重复
+        key = os.getenv(ENCRYPTION_KEY_ENV)
+        if not key:
+            raise RuntimeError(
+                "未设置 ENCRYPTION_KEY 环境变量，无法解密凭证。"
+            )
+        if isinstance(key, str):
+            key = key.encode()
+        self.cipher = Fernet(key)
 
     def validate_credentials(self, service_account_json: dict) -> dict:
         """验证 GCP Service Account 凭证
