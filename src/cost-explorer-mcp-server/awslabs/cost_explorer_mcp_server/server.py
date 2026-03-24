@@ -67,12 +67,11 @@ SERVER_INSTRUCTIONS = """
 """
 
 # Create FastMCP server with instructions
+# Note: host/port/stateless_http moved to env vars (FASTMCP_HOST, FASTMCP_PORT, FASTMCP_STATELESS_HTTP)
+# since FastMCP 3.x no longer accepts them in the constructor.
 app = FastMCP(
     name='awslabs.cost-explorer-mcp-server',
     instructions=SERVER_INSTRUCTIONS,
-    host='0.0.0.0',
-    stateless_http=True,
-    port=8000,
 )
 
 # Register all tools with the app
