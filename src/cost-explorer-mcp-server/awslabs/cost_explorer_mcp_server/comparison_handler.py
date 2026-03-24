@@ -17,10 +17,10 @@
 Comparison tools for Cost Explorer MCP Server.
 """
 
-import os
-import sys
+import logging
 from awslabs.cost_explorer_mcp_server.constants import VALID_COST_METRICS
 from awslabs.cost_explorer_mcp_server.helpers import (
+    _setup_account_context,
     create_detailed_group_key,
     extract_group_key_from_complex_selector,
     extract_usage_context_from_selector,
@@ -30,15 +30,12 @@ from awslabs.cost_explorer_mcp_server.helpers import (
     validate_group_by,
 )
 from awslabs.cost_explorer_mcp_server.models import DateRange
-from loguru import logger
-from mcp.server.fastmcp import Context
+from fastmcp import Context
 from pydantic import Field
 from typing import Any, Dict, Optional, Tuple, Union
 
 
-# Configure Loguru logging
-logger.remove()
-logger.add(sys.stderr, level=os.getenv('FASTMCP_LOG_LEVEL', 'WARNING'))
+logger = logging.getLogger(__name__)
 
 # Constants
 DEFAULT_GROUP_BY = {'Type': 'DIMENSION', 'Key': 'SERVICE'}
@@ -179,6 +176,9 @@ async def get_cost_and_usage_comparisons(
         None,
         description='Filter criteria as a Python dictionary to narrow down AWS cost comparisons. Supports filtering by Dimensions (SERVICE, REGION, etc.), Tags, or CostCategories. You can use logical operators (And, Or, Not) for complex filters. Same format as get_cost_and_usage filter_expression.',
     ),
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
+    ),
 ) -> Dict[str, Any]:
     """Compare AWS costs and usage between two time periods.
 
@@ -222,6 +222,7 @@ async def get_cost_and_usage_comparisons(
         metric_for_comparison: Cost metric to compare (UnblendedCost, BlendedCost, etc.)
         group_by: Either a dictionary with Type and Key, or simply a string key to group by
         filter_expression: Filter criteria as a Python dictionary
+        target_account_id: Target AWS account ID for multi-account credential switching
 
     Returns:
         Dictionary containing comparison data with percentage changes, absolute differences,
@@ -234,6 +235,9 @@ async def get_cost_and_usage_comparisons(
     comparison_end = comparison_date_range.end_date
 
     try:
+        # 多账号凭证切换
+        if target_account_id:
+            await _setup_account_context(target_account_id)
         # Validate inputs using validation function
         is_valid, error_msg, validated_params = _validate_comparison_inputs(
             baseline_date_range,
@@ -419,6 +423,9 @@ async def get_cost_comparison_drivers(
         None,
         description='Filter criteria as a Python dictionary to narrow down AWS cost driver analysis. Supports filtering by Dimensions (SERVICE, REGION, etc.), Tags, or CostCategories. You can use logical operators (And, Or, Not) for complex filters. Same format as get_cost_and_usage filter_expression.',
     ),
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
+    ),
 ) -> Dict[str, Any]:
     """Analyze what drove cost changes between two time periods.
 
@@ -493,6 +500,7 @@ async def get_cost_comparison_drivers(
         metric_for_comparison: Cost metric to analyze drivers for (UnblendedCost, BlendedCost, etc.)
         group_by: Either a dictionary with Type and Key, or simply a string key to group by
         filter_expression: Filter criteria as a Python dictionary
+        target_account_id: Target AWS account ID for multi-account credential switching
 
     Returns:
         with specific usage types, usage quantity changes, driver types (savings plans, discounts, usage changes, support fees), and contextual information
@@ -503,6 +511,10 @@ async def get_cost_comparison_drivers(
     comparison_start = comparison_date_range.start_date
     comparison_end = comparison_date_range.end_date
     try:
+        # 多账号凭证切换
+        if target_account_id:
+            await _setup_account_context(target_account_id)
+
         # Validate inputs using validation function
         is_valid, error_msg, validated_params = _validate_comparison_inputs(
             baseline_date_range,

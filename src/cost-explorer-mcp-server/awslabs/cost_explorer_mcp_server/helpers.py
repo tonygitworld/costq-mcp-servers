@@ -15,53 +15,97 @@
 """Helper functions for the Cost Explorer MCP server."""
 
 import boto3
+import logging
 import os
 import re
-import sys
+from awslabs.cost_explorer_mcp_server import __version__
 from awslabs.cost_explorer_mcp_server.constants import (
     VALID_DIMENSIONS,
     VALID_GROUP_BY_DIMENSIONS,
     VALID_GROUP_BY_TYPES,
     VALID_MATCH_OPTIONS,
 )
+from botocore.config import Config
+from cred_extract_services.context_manager import set_aws_credentials
+from cred_extract_services.credential_extractor import extract_aws_credentials
 from datetime import datetime, timezone
-from loguru import logger
 from typing import Any, Dict, Optional, Tuple
 
 
-# Configure Loguru logging
-logger.remove()
-logger.add(sys.stderr, level=os.getenv('FASTMCP_LOG_LEVEL', 'WARNING'))
+logger = logging.getLogger(__name__)
 
-# Global client cache
-_cost_explorer_client = None
+# boto3 User-Agent 标识（用于 AWS 侧追踪请求来源）
+USER_AGENT_EXTRA = f'md/costq#mcp#cost-explorer-mcp-server#{__version__}'
+_config = Config(user_agent_extra=USER_AGENT_EXTRA)
 
 
 def get_cost_explorer_client():
-    """Get Cost Explorer client with proper session management and caching.
+    """Create a new Cost Explorer client using current environment credentials.
+
+    每次调用创建新 client，以支持多账号凭证切换。
+    当 _setup_account_context() 修改环境变量后，
+    新创建的 client 会自动使用最新的凭证。
+    """
+    try:
+        aws_region = os.environ.get('AWS_REGION', 'us-east-1')
+        aws_profile = os.environ.get('AWS_PROFILE')
+
+        if aws_profile:
+            return boto3.Session(profile_name=aws_profile, region_name=aws_region).client(
+                'ce', config=_config
+            )
+        else:
+            return boto3.Session(region_name=aws_region).client('ce', config=_config)
+    except Exception as e:
+        logger.error('Error creating Cost Explorer client: %s', str(e))
+        raise
+
+
+async def _setup_account_context(
+    target_account_id: str,
+) -> dict[str, str]:
+    """设置 AWS 凭证上下文.
+
+    统一入口函数，完成以下操作：
+    1. 查询账号信息（自包含数据库查询）
+    2. 提取凭证（AKSK 解密 / IAM Role AssumeRole）
+    3. 设置环境变量
+
+    Args:
+        target_account_id: AWS 账号 ID（数据库主键）
 
     Returns:
-        boto3.client: Configured Cost Explorer client (cached after first call)
+        凭证信息字典（用于日志记录，已脱敏）
+
+    Raises:
+        AccountNotFoundError: 账号不存在
+        CredentialDecryptionError: 凭证解密失败
+        AssumeRoleError: AssumeRole 失败
+        DatabaseConnectionError: 数据库连接失败
     """
-    global _cost_explorer_client
+    logger.info('开始设置 AWS 凭证上下文')
 
-    if _cost_explorer_client is None:
-        try:
-            # Read environment variables dynamically
-            aws_region = os.environ.get('AWS_REGION', 'us-east-1')
-            aws_profile = os.environ.get('AWS_PROFILE')
+    # 1. 提取凭证
+    credentials = await extract_aws_credentials(target_account_id)
 
-            if aws_profile:
-                _cost_explorer_client = boto3.Session(
-                    profile_name=aws_profile, region_name=aws_region
-                ).client('ce')
-            else:
-                _cost_explorer_client = boto3.Session(region_name=aws_region).client('ce')
-        except Exception as e:
-            logger.error(f'Error creating Cost Explorer client: {str(e)}')
-            raise
+    # 2. 设置环境变量
+    set_aws_credentials(
+        access_key_id=credentials['access_key_id'],
+        secret_access_key=credentials['secret_access_key'],
+        session_token=credentials.get('session_token'),
+        region=credentials['region'],
+    )
 
-    return _cost_explorer_client
+    # 3. 返回脱敏信息（用于日志）
+    cred_info = {
+        'account_id': credentials['account_id'],
+        'account_alias': credentials.get('alias', 'Unknown'),
+        'auth_type': credentials['auth_type'],
+        'region': credentials['region'],
+    }
+
+    logger.info('AWS 凭证上下文设置完成: %s', cred_info)
+    return cred_info
 
 
 def validate_dimension_key(dimension_key: str) -> Dict[str, Any]:
@@ -109,7 +153,11 @@ def get_available_dimension_values(
         return {'dimension': key.upper(), 'values': values}
     except Exception as e:
         logger.error(
-            f'Error getting dimension values for {key.upper()} ({billing_period_start} to {billing_period_end}): {e}'
+            'Error getting dimension values for %s (%s to %s): %s',
+            key.upper(),
+            billing_period_start,
+            billing_period_end,
+            e,
         )
         return {'error': str(e)}
 
@@ -133,7 +181,11 @@ def get_available_tag_values(
         return {'tag_key': tag_key, 'values': tag_values}
     except Exception as e:
         logger.error(
-            f'Error getting tag values for {tag_key} ({billing_period_start} to {billing_period_end}): {e}'
+            'Error getting tag values for %s (%s to %s): %s',
+            tag_key,
+            billing_period_start,
+            billing_period_end,
+            e,
         )
         return {'error': str(e)}
 

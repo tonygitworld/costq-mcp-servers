@@ -17,29 +17,26 @@
 Forecasting tools for Cost Explorer MCP Server.
 """
 
-import os
-import sys
+import logging
 from awslabs.cost_explorer_mcp_server.constants import (
     VALID_FORECAST_GRANULARITIES,
     VALID_FORECAST_METRICS,
     VALID_PREDICTION_INTERVALS,
 )
 from awslabs.cost_explorer_mcp_server.helpers import (
+    _setup_account_context,
     get_cost_explorer_client,
     validate_expression,
     validate_forecast_date_range,
 )
 from awslabs.cost_explorer_mcp_server.models import DateRange
 from datetime import datetime, timedelta, timezone
-from loguru import logger
-from mcp.server.fastmcp import Context
+from fastmcp import Context
 from pydantic import Field
 from typing import Any, Dict, Optional
 
 
-# Configure Loguru logging
-logger.remove()
-logger.add(sys.stderr, level=os.getenv('FASTMCP_LOG_LEVEL', 'WARNING'))
+logger = logging.getLogger(__name__)
 
 
 async def get_cost_forecast(
@@ -60,6 +57,9 @@ async def get_cost_forecast(
     prediction_interval_level: int = Field(
         80,
         description=f'The confidence level for the forecast prediction interval. Valid values are {" and ".join(map(str, VALID_PREDICTION_INTERVALS))}. Higher values provide wider confidence ranges.',
+    ),
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
     ),
 ) -> Dict[str, Any]:
     """Retrieve AWS cost forecasts based on historical usage patterns.
@@ -101,6 +101,7 @@ async def get_cost_forecast(
         filter_expression: Filter criteria as a Python dictionary
         metric: Cost metric to forecast (UNBLENDED_COST, AMORTIZED_COST, etc.)
         prediction_interval_level: Confidence level for prediction intervals (80 or 95)
+        target_account_id: Target AWS account ID for multi-account credential switching
 
     Returns:
         Dictionary containing forecast data with confidence intervals and metadata
@@ -110,6 +111,10 @@ async def get_cost_forecast(
     forecast_end = date_range.end_date
 
     try:
+        # 多账号凭证切换
+        if target_account_id:
+            await _setup_account_context(target_account_id)
+
         # Process inputs - simplified granularity validation
         granularity = str(granularity).upper()
 

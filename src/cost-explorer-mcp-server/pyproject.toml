@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "boto3>=1.38.40",
-    "loguru>=0.7.0",
     "mcp[cli]>=1.23.0",
     "pandas>=2.2.3",
     "pydantic>=2.10.6",
@@ -107,6 +106,9 @@ update_changelog_on_bump = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["awslabs"]
+
+[tool.uv]
+package = true
 
 [tool.pytest.ini_options]
 addopts = "--cov=awslabs.cost_explorer_mcp_server --cov-report=term-missing"

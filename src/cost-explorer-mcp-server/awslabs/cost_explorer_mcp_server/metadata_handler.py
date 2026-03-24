@@ -17,26 +17,28 @@
 Metadata tools for Cost Explorer MCP Server.
 """
 
-import os
-import sys
+import logging
 from awslabs.cost_explorer_mcp_server.helpers import (
+    _setup_account_context,
     get_available_dimension_values,
     get_available_tag_values,
 )
 from awslabs.cost_explorer_mcp_server.models import DateRange, DimensionKey
-from loguru import logger
-from mcp.server.fastmcp import Context
+from fastmcp import Context
 from pydantic import Field
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
-# Configure Loguru logging
-logger.remove()
-logger.add(sys.stderr, level=os.getenv('FASTMCP_LOG_LEVEL', 'WARNING'))
+logger = logging.getLogger(__name__)
 
 
 async def get_dimension_values(
-    ctx: Context, date_range: DateRange, dimension: DimensionKey
+    ctx: Context,
+    date_range: DateRange,
+    dimension: DimensionKey,
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
+    ),
 ) -> Dict[str, Any]:
     """Retrieve available dimension values for AWS Cost Explorer.
 
@@ -48,11 +50,16 @@ async def get_dimension_values(
         ctx: MCP context
         date_range: The billing period start and end dates in YYYY-MM-DD format
         dimension: The dimension key to retrieve values for (e.g., SERVICE, REGION, LINKED_ACCOUNT)
+        target_account_id: Target AWS account ID for multi-account credential switching
 
     Returns:
         Dictionary containing the dimension name and list of available values
     """
     try:
+        # 多账号凭证切换
+        if target_account_id:
+            await _setup_account_context(target_account_id)
+
         response = get_available_dimension_values(
             dimension.dimension_key, date_range.start_date, date_range.end_date
         )
@@ -66,6 +73,9 @@ async def get_tag_values(
     ctx: Context,
     date_range: DateRange,
     tag_key: str = Field(..., description='The tag key to retrieve values for'),
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
+    ),
 ) -> Dict[str, Any]:
     """Retrieve available tag values for AWS Cost Explorer.
 
@@ -76,11 +86,16 @@ async def get_tag_values(
         ctx: MCP context
         date_range: The billing period start and end dates in YYYY-MM-DD format
         tag_key: The tag key to retrieve values for
+        target_account_id: Target AWS account ID for multi-account credential switching
 
     Returns:
         Dictionary containing the tag key and list of available values
     """
     try:
+        # 多账号凭证切换
+        if target_account_id:
+            await _setup_account_context(target_account_id)
+
         response = get_available_tag_values(tag_key, date_range.start_date, date_range.end_date)
         return response
     except Exception as e:

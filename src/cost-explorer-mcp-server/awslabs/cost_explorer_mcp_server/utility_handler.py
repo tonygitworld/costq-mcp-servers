@@ -18,24 +18,20 @@ Utility tools for Cost Explorer MCP Server.
 
 """
 
-import os
-import sys
+import logging
 from datetime import datetime, timezone
-from loguru import logger
-from mcp.server.fastmcp import Context
+from fastmcp import Context
 from typing import Dict
 
 
-# Configure Loguru logging
-logger.remove()
-logger.add(sys.stderr, level=os.getenv('FASTMCP_LOG_LEVEL', 'WARNING'))
+logger = logging.getLogger(__name__)
 
 
 async def get_today_date(ctx: Context) -> Dict[str, str]:
     """Retrieve current date information in UTC time zone.
 
     This tool retrieves the current date in YYYY-MM-DD format and the current month in YYYY-MM format.
-    It's useful for calculating relevent date when user ask last N months/days.
+    It's useful for calculating relevant date when user ask last N months/days.
 
     Args:
         ctx: MCP context

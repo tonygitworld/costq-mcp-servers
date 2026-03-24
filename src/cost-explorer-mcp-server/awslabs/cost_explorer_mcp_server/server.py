@@ -17,8 +17,7 @@
 This server provides tools for analyzing AWS costs and usage data through the AWS Cost Explorer API.
 """
 
-import os
-import sys
+import logging
 from awslabs.cost_explorer_mcp_server.comparison_handler import (
     get_cost_and_usage_comparisons,
     get_cost_comparison_drivers,
@@ -30,13 +29,10 @@ from awslabs.cost_explorer_mcp_server.metadata_handler import (
     get_tag_values,
 )
 from awslabs.cost_explorer_mcp_server.utility_handler import get_today_date
-from loguru import logger
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 
-# Configure Loguru logging
-logger.remove()
-logger.add(sys.stderr, level=os.getenv('FASTMCP_LOG_LEVEL', 'WARNING'))
+logger = logging.getLogger(__name__)
 
 # Define server instructions
 SERVER_INSTRUCTIONS = """
@@ -71,7 +67,13 @@ SERVER_INSTRUCTIONS = """
 """
 
 # Create FastMCP server with instructions
-app = FastMCP(name='Cost Explorer MCP Server', instructions=SERVER_INSTRUCTIONS)
+app = FastMCP(
+    name='awslabs.cost-explorer-mcp-server',
+    instructions=SERVER_INSTRUCTIONS,
+    host='0.0.0.0',
+    stateless_http=True,
+    port=8000,
+)
 
 # Register all tools with the app
 app.tool('get_today_date')(get_today_date)
@@ -84,8 +86,13 @@ app.tool('get_cost_and_usage')(get_cost_and_usage)
 
 
 def main():
-    """Run the MCP server with CLI argument support."""
-    app.run()
+    """Run the MCP server with streamable HTTP transport for AgentCore."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s | %(levelname)s | %(name)s:%(funcName)s:%(lineno)d - %(message)s',
+    )
+
+    app.run(transport='streamable-http')
 
 
 if __name__ == '__main__':

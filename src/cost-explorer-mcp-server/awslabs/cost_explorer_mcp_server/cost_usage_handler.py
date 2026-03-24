@@ -18,15 +18,15 @@ This server provides tools for analyzing AWS costs and usage data through the AW
 """
 
 import json
-import os
+import logging
 import pandas as pd
-import sys
 from awslabs.cost_explorer_mcp_server.constants import (
     VALID_COST_METRICS,
     VALID_GRANULARITIES,
     VALID_MATCH_OPTIONS,
 )
 from awslabs.cost_explorer_mcp_server.helpers import (
+    _setup_account_context,
     format_date_for_api,
     get_cost_explorer_client,
     validate_expression,
@@ -34,15 +34,12 @@ from awslabs.cost_explorer_mcp_server.helpers import (
 )
 from awslabs.cost_explorer_mcp_server.models import DateRange
 from datetime import datetime, timedelta
-from loguru import logger
-from mcp.server.fastmcp import Context
+from fastmcp import Context
 from pydantic import Field
 from typing import Any, Dict, Optional, Union
 
 
-# Configure Loguru logging
-logger.remove()
-logger.add(sys.stderr, level=os.getenv('FASTMCP_LOG_LEVEL', 'WARNING'))
+logger = logging.getLogger(__name__)
 
 # Constants
 COST_EXPLORER_END_DATE_OFFSET = 1  # Offset to ensure end date is inclusive
@@ -66,6 +63,9 @@ async def get_cost_and_usage(
     metric: str = Field(
         'UnblendedCost',
         description=f'The metric to return in the query. Valid values are {", ".join(VALID_COST_METRICS)}. IMPORTANT: For UsageQuantity, the service aggregates usage numbers without considering units, making results meaningless when mixing different unit types (e.g., compute hours + data transfer GB). To get meaningful UsageQuantity metrics, you MUST filter by USAGE_TYPE or group by USAGE_TYPE/USAGE_TYPE_GROUP to ensure consistent units.',
+    ),
+    target_account_id: Optional[str] = Field(
+        None, description='Target AWS account ID for multi-account access'
     ),
 ) -> Dict[str, Any]:
     """Retrieve AWS cost and usage data.
@@ -158,6 +158,7 @@ async def get_cost_and_usage(
         group_by: Either a dictionary with Type and Key, or simply a string key to group by
         filter_expression: Filter criteria as a Python dictionary
         metric: Cost metric to use (UnblendedCost, BlendedCost, etc.)
+        target_account_id: Target AWS account ID for multi-account credential switching
 
     Returns:
         Dictionary containing cost report data grouped according to the specified parameters
@@ -167,6 +168,10 @@ async def get_cost_and_usage(
     billing_period_end = date_range.end_date
 
     try:
+        # 多账号凭证切换
+        if target_account_id:
+            await _setup_account_context(target_account_id)
+
         # Process inputs - simplified granularity validation
         granularity = str(granularity).upper()
 
