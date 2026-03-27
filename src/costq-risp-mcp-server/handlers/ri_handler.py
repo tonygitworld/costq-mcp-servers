@@ -35,7 +35,7 @@ from cred_extract_services import (
     CredentialDecryptionError,
     DatabaseConnectionError,
 )
-from server import _setup_account_context
+from utils.account_context import _setup_account_context
 from utils.aws_client import (
     call_aws_api_with_retry,
     get_cost_explorer_client,
