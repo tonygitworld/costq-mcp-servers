@@ -13,9 +13,12 @@ import asyncio
 import json
 import logging
 import os
+import random
+import time
 from typing import Optional
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError as SQLAlchemyOperationalError
 from sqlalchemy.pool import QueuePool
 
 from .exceptions import AccountNotFoundError, DatabaseConnectionError
@@ -112,6 +115,8 @@ async def _get_engine():
                     pool_size=5,
                     max_overflow=10,
                     pool_pre_ping=True,
+                    pool_timeout=10,
+                    pool_recycle=1800,
                 )
 
             _engine = await loop.run_in_executor(None, _create_engine)
@@ -121,75 +126,120 @@ async def _get_engine():
 
 
 async def query_account(account_id: str) -> Optional[dict]:
-    """查询 AWS 账号信息（异步版本）
+    """查询 AWS 账号信息（异步版本，含指数退避重试）
 
     通过 LEFT JOIN organizations 表获取 external_id。
+    对 OperationalError（连接超时/拒绝等瞬时错误）自动重试，
+    其他异常立即抛出。
 
     Args:
         account_id: AWS 账号 ID（数据库主键）
 
     Returns:
         账号信息字典，不存在则返回 None
-        {
-            "id": "uuid",
-            "account_id": "123456789012",
-            "alias": "production",
-            "auth_type": "iam_role",  # 或 "aksk"
-            "role_arn": "arn:aws:iam::...",  # IAM Role 类型
-            "encrypted_secret_key": "...",  # AKSK 类型
-            "org_id": "uuid",  # 组织 ID
-            "external_id": "org-xxx",  # 从 organizations 表获取（可能为 None）
-            "region": "us-east-1"
-        }
 
     Raises:
-        DatabaseConnectionError: 数据库查询失败
+        DatabaseConnectionError: 数据库查询失败（含重试耗尽）
     """
-    try:
-        engine = await _get_engine()
+    max_retries = 3
+    base_delay = 1.0  # 初始间隔 1 秒
+    max_jitter = 0.5
+    total_timeout = 15.0  # 总超时上限
+    start_time = time.monotonic()
 
-        query = text("""
-            SELECT
-                a.id, a.account_id, a.alias, a.auth_type,
-                a.access_key_id, a.secret_access_key_encrypted,
-                a.role_arn, a.region, a.org_id,
-                o.external_id
-            FROM aws_accounts a
-            LEFT JOIN organizations o ON a.org_id = o.id
-            WHERE a.account_id = :account_id
-        """)
+    engine = await _get_engine()
 
-        loop = asyncio.get_event_loop()
+    query = text("""
+        SELECT
+            a.id, a.account_id, a.alias, a.auth_type,
+            a.access_key_id, a.secret_access_key_encrypted,
+            a.role_arn, a.region, a.org_id,
+            o.external_id
+        FROM aws_accounts a
+        LEFT JOIN organizations o ON a.org_id = o.id
+        WHERE a.account_id = :account_id
+    """)
 
-        def _query_sync():
-            with engine.connect() as conn:
-                result = conn.execute(query, {"account_id": account_id})
-                row = result.fetchone()
+    loop = asyncio.get_event_loop()
 
-                if not row:
-                    logger.warning("账号不存在: %s", account_id)
-                    return None
+    def _query_sync():
+        with engine.connect() as conn:
+            result = conn.execute(query, {"account_id": account_id})
+            row = result.fetchone()
 
-                return {
-                    "id": str(row.id),
-                    "account_id": row.account_id,
-                    "alias": row.alias,
-                    "auth_type": row.auth_type,
-                    "access_key_id": row.access_key_id,
-                    "encrypted_secret_key": row.secret_access_key_encrypted,
-                    "role_arn": row.role_arn,
-                    "region": row.region,
-                    "org_id": str(row.org_id) if row.org_id else None,
-                    "external_id": row.external_id,
-                }
+            if not row:
+                logger.warning("账号不存在: %s", account_id)
+                return None
 
-        return await loop.run_in_executor(None, _query_sync)
+            return {
+                "id": str(row.id),
+                "account_id": row.account_id,
+                "alias": row.alias,
+                "auth_type": row.auth_type,
+                "access_key_id": row.access_key_id,
+                "encrypted_secret_key": row.secret_access_key_encrypted,
+                "role_arn": row.role_arn,
+                "region": row.region,
+                "org_id": str(row.org_id) if row.org_id else None,
+                "external_id": row.external_id,
+            }
 
-    except Exception as e:
-        if isinstance(e, DatabaseConnectionError):
+    last_error = None
+    for attempt in range(max_retries + 1):
+        # 总超时检查
+        elapsed = time.monotonic() - start_time
+        if attempt > 0 and elapsed >= total_timeout:
+            logger.error(
+                "数据库查询总超时: %.1fs >= %.1fs, 放弃重试",
+                elapsed,
+                total_timeout,
+            )
+            break
+
+        try:
+            return await loop.run_in_executor(None, _query_sync)
+
+        except SQLAlchemyOperationalError as e:
+            last_error = e
+            if attempt < max_retries:
+                delay = base_delay * (2 ** attempt) + random.uniform(
+                    0, max_jitter
+                )
+                # 确保不超过总超时
+                remaining = total_timeout - (time.monotonic() - start_time)
+                if delay > remaining:
+                    delay = max(remaining, 0)
+                logger.warning(
+                    "数据库连接失败（重试 %d/%d）: %s, %.1fs 后重试",
+                    attempt + 1,
+                    max_retries,
+                    type(e).__name__,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    "数据库连接失败（重试耗尽 %d/%d）: %s",
+                    attempt + 1,
+                    max_retries,
+                    type(e).__name__,
+                )
+
+        except DatabaseConnectionError:
             raise
-        logger.error("数据库查询失败: %s", type(e).__name__)
-        raise DatabaseConnectionError(f"查询账号信息失败: {type(e).__name__}")
+
+        except Exception as e:
+            # 非 OperationalError，立即抛出不重试
+            logger.error("数据库查询失败: %s", type(e).__name__)
+            raise DatabaseConnectionError(
+                f"查询账号信息失败: {type(e).__name__}"
+            )
+
+    # 重试耗尽
+    raise DatabaseConnectionError(
+        f"查询账号信息失败（重试{max_retries}次后）: "
+        f"{type(last_error).__name__}"
+    )
 
 
 async def close_connection():

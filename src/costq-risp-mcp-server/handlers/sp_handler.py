@@ -179,11 +179,9 @@ async def get_savings_plans_utilization(
                 return format_error_response(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
-            except DatabaseConnectionError as e:
-                logger.error("数据库连接失败")
-                return format_error_response(
-                    error=e, operation=operation, error_type="database_connection_error"
-                )
+            except DatabaseConnectionError:
+                logger.error("数据库连接失败", exc_info=True)
+                raise
         # Get Cost Explorer client
         ce_client = get_cost_explorer_client()
 
@@ -416,11 +414,9 @@ async def get_savings_plans_coverage(
                 return format_error_response(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
-            except DatabaseConnectionError as e:
-                logger.error("数据库连接失败")
-                return format_error_response(
-                    error=e, operation=operation, error_type="database_connection_error"
-                )
+            except DatabaseConnectionError:
+                logger.error("数据库连接失败", exc_info=True)
+                raise
         # Get Cost Explorer client
         ce_client = get_cost_explorer_client()
 
@@ -641,11 +637,9 @@ async def get_savings_plans_purchase_recommendation(
                 return format_error_response(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
-            except DatabaseConnectionError as e:
-                logger.error("数据库连接失败")
-                return format_error_response(
-                    error=e, operation=operation, error_type="database_connection_error"
-                )
+            except DatabaseConnectionError:
+                logger.error("数据库连接失败", exc_info=True)
+                raise
         # Get Cost Explorer client
         ce_client = get_cost_explorer_client()
 
@@ -821,11 +815,9 @@ async def start_savings_plans_purchase_recommendation_generation(
                 return format_error_response(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
-            except DatabaseConnectionError as e:
-                logger.error("数据库连接失败")
-                return format_error_response(
-                    error=e, operation=operation, error_type="database_connection_error"
-                )
+            except DatabaseConnectionError:
+                logger.error("数据库连接失败", exc_info=True)
+                raise
         # Get Cost Explorer client
         ce_client = get_cost_explorer_client()
 
@@ -969,11 +961,9 @@ async def get_savings_plans_utilization_details(
                 return format_error_response(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
-            except DatabaseConnectionError as e:
-                logger.error("数据库连接失败")
-                return format_error_response(
-                    error=e, operation=operation, error_type="database_connection_error"
-                )
+            except DatabaseConnectionError:
+                logger.error("数据库连接失败", exc_info=True)
+                raise
         # Get Cost Explorer client
         ce_client = get_cost_explorer_client()
 
@@ -1156,11 +1146,9 @@ async def get_savings_plan_purchase_recommendation_details(
                 return format_error_response(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
-            except DatabaseConnectionError as e:
-                logger.error("数据库连接失败")
-                return format_error_response(
-                    error=e, operation=operation, error_type="database_connection_error"
-                )
+            except DatabaseConnectionError:
+                logger.error("数据库连接失败", exc_info=True)
+                raise
         # Get Cost Explorer client
         ce_client = get_cost_explorer_client()
 
@@ -1284,11 +1272,9 @@ async def list_savings_plans_purchase_recommendation_generation(
                 return format_error_response(
                     error=e, operation=operation, error_type="assume_role_error"
                 )
-            except DatabaseConnectionError as e:
-                logger.error("数据库连接失败")
-                return format_error_response(
-                    error=e, operation=operation, error_type="database_connection_error"
-                )
+            except DatabaseConnectionError:
+                logger.error("数据库连接失败", exc_info=True)
+                raise
         # Get Cost Explorer client
         ce_client = get_cost_explorer_client()
 
