@@ -28,9 +28,6 @@ from mcp.server.fastmcp import FastMCP
 
 # Import credential extraction services (绝对导入，支持直接运行 server.py)
 from cred_extract_services import (
-    extract_aws_credentials,
-    set_aws_credentials,
-    setup_account_context,
     AccountNotFoundError,
     AssumeRoleError,
     CredentialDecryptionError,
