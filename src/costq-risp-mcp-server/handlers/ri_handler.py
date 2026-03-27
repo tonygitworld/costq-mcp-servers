@@ -34,8 +34,8 @@ from cred_extract_services import (
     AssumeRoleError,
     CredentialDecryptionError,
     DatabaseConnectionError,
-    setup_account_context,
 )
+from server import _setup_account_context
 from utils.aws_client import (
     call_aws_api_with_retry,
     get_cost_explorer_client,
@@ -141,7 +141,7 @@ async def get_reservation_utilization(
         # 设置账号上下文（如果指定了目标账号）
         if target_account_id:
             try:
-                account_info = await setup_account_context(target_account_id)
+                account_info = await _setup_account_context(target_account_id)
                 logger.info(f"已切换到账号: {account_info['account_id']} ({account_info['account_alias']})")
             except AccountNotFoundError as e:
                 logger.error(f"账号不存在: {target_account_id}")
@@ -353,7 +353,7 @@ async def get_reservation_coverage(
         # 设置账号上下文（如果指定了目标账号）
         if target_account_id:
             try:
-                account_info = await setup_account_context(target_account_id)
+                account_info = await _setup_account_context(target_account_id)
                 logger.info(f"已切换到账号: {account_info['account_id']} ({account_info['account_alias']})")
             except AccountNotFoundError as e:
                 logger.error(f"账号不存在: {target_account_id}")
@@ -575,7 +575,7 @@ async def get_reservation_purchase_recommendation(
         # 设置账号上下文（如果指定了目标账号）
         if target_account_id:
             try:
-                account_info = await setup_account_context(target_account_id)
+                account_info = await _setup_account_context(target_account_id)
                 logger.info(f"已切换到账号: {account_info['account_id']} ({account_info['account_alias']})")
             except AccountNotFoundError as e:
                 logger.error(f"账号不存在: {target_account_id}")
