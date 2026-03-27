@@ -124,6 +124,8 @@ async def start_commitment_purchase_analysis(
 
         return format_success_response(data=result_data, operation=operation)
 
+    except DatabaseConnectionError:
+        raise
     except Exception as e:
         logger.error(f"Error in {operation}: {str(e)}", exc_info=True)
         return format_error_response(error=e, operation=operation)
@@ -217,6 +219,8 @@ async def get_commitment_purchase_analysis(
 
         return format_success_response(data=result_data, operation=operation)
 
+    except DatabaseConnectionError:
+        raise
     except Exception as e:
         logger.error(f"Error in {operation}: {str(e)}", exc_info=True)
         return format_error_response(error=e, operation=operation)
@@ -359,6 +363,8 @@ async def list_commitment_purchase_analyses(
 
         return format_success_response(data=result_data, operation=operation)
 
+    except DatabaseConnectionError:
+        raise
     except Exception as e:
         logger.error(f"Error in {operation}: {str(e)}", exc_info=True)
         return format_error_response(error=e, operation=operation)

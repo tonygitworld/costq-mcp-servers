@@ -256,6 +256,8 @@ async def get_reservation_utilization(
             data=result_data, operation=operation, summary=formatted_summary
         )
 
+    except DatabaseConnectionError:
+        raise
     except Exception as e:
         logger.error(f"Error in {operation}: {str(e)}", exc_info=True)
         return format_error_response(error=e, operation=operation)
@@ -468,6 +470,8 @@ async def get_reservation_coverage(
             data=result_data, operation=operation, summary=formatted_summary
         )
 
+    except DatabaseConnectionError:
+        raise
     except Exception as e:
         logger.error(f"Error in {operation}: {str(e)}", exc_info=True)
         return format_error_response(error=e, operation=operation)
@@ -741,6 +745,8 @@ async def get_reservation_purchase_recommendation(
             data=result_data, operation=operation, summary=formatted_summary
         )
 
+    except DatabaseConnectionError:
+        raise
     except Exception as e:
         logger.error(f"Error in {operation}: {str(e)}", exc_info=True)
         return format_error_response(error=e, operation=operation)
